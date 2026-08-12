@@ -1,0 +1,3 @@
+#!/bin/sh
+
+/usr/bin/yes x | /usr/bin/head -c 600000

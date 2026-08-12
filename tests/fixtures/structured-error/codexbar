@@ -1,0 +1,4 @@
+#!/bin/sh
+
+echo '[{"provider":"codex","source":"codex-cli","error":{"code":1,"message":"authentication required","kind":"provider"}}]'
+exit 7

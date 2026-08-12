@@ -1,0 +1,93 @@
+#!/bin/sh
+set -eu
+
+# Bun otherwise trusts bunfig.toml and .env from the caller's working tree.
+# Resolve this launcher through package-manager symlinks, then use only the
+# package-owned runtime configuration.
+script_path=$0
+case "$script_path" in
+  */*) ;;
+  *) script_path=$(command -v -- "$script_path") ;;
+esac
+
+while [ -L "$script_path" ]; do
+  script_dir=${script_path%/*}
+  [ "$script_dir" = "$script_path" ] && script_dir=.
+  script_dir=$(CDPATH='' cd -P -- "$script_dir" && pwd)
+  link_target=$(/usr/bin/readlink "$script_path")
+  case "$link_target" in
+    /*) script_path=$link_target ;;
+    *) script_path=$script_dir/$link_target ;;
+  esac
+done
+
+script_dir=${script_path%/*}
+[ "$script_dir" = "$script_path" ] && script_dir=.
+package_root=$(CDPATH='' cd -P -- "$script_dir/.." && pwd)
+caller_root=$(CDPATH='' cd -P -- . && pwd)
+
+# Resolve Bun from fixed install locations rather than caller-controlled PATH.
+bun_path=
+for candidate in \
+  /opt/homebrew/bin/bun \
+  /usr/local/bin/bun \
+  /home/linuxbrew/.linuxbrew/bin/bun \
+  "${HOME:-}/.bun/bin/bun"
+do
+  case "$candidate" in
+    "$caller_root"|"$caller_root"/*) continue ;;
+  esac
+  [ -f "$candidate" ] && [ -x "$candidate" ] || continue
+
+  resolved_bun=$candidate
+  link_count=0
+  while [ -L "$resolved_bun" ]; do
+    link_count=$((link_count + 1))
+    [ "$link_count" -le 32 ] || break
+    bun_dir=${resolved_bun%/*}
+    [ "$bun_dir" = "$resolved_bun" ] && bun_dir=.
+    bun_dir=$(CDPATH='' cd -P -- "$bun_dir" && pwd)
+    link_target=$(/usr/bin/readlink "$resolved_bun")
+    case "$link_target" in
+      /*) resolved_bun=$link_target ;;
+      *) resolved_bun=$bun_dir/$link_target ;;
+    esac
+  done
+  [ "$link_count" -le 32 ] || continue
+  bun_dir=${resolved_bun%/*}
+  [ "$bun_dir" = "$resolved_bun" ] && bun_dir=.
+  bun_dir=$(CDPATH='' cd -P -- "$bun_dir" && pwd) || continue
+  resolved_bun=$bun_dir/${resolved_bun##*/}
+  case "$resolved_bun" in
+    "$caller_root"|"$caller_root"/*) continue ;;
+  esac
+  [ -f "$resolved_bun" ] && [ -x "$resolved_bun" ] || continue
+
+  if runtime_stat=$(/usr/bin/stat -f '%Lp %u' "$resolved_bun" 2>/dev/null); then
+    :
+  elif runtime_stat=$(/usr/bin/stat -c '%a %u' "$resolved_bun" 2>/dev/null); then
+    :
+  else
+    continue
+  fi
+  runtime_mode=${runtime_stat%% *}
+  runtime_uid=${runtime_stat#* }
+  current_uid=$(/usr/bin/id -u)
+  [ "$runtime_uid" = "$current_uid" ] || [ "$runtime_uid" = 0 ] || continue
+  runtime_group_mode=$((runtime_mode / 10 % 10))
+  runtime_world_mode=$((runtime_mode % 10))
+  [ $((runtime_group_mode & 2)) -eq 0 ] || continue
+  [ $((runtime_world_mode & 2)) -eq 0 ] || continue
+
+  bun_path=$resolved_bun
+  break
+done
+
+if [ -z "$bun_path" ]; then
+  echo "usagemux: Bun was not found in a trusted install location." >&2
+  exit 69
+fi
+
+unset BUN_OPTIONS NODE_OPTIONS
+exec "$bun_path" --no-env-file --no-install --config="$package_root/bunfig.runtime.toml" \
+  "$package_root/src/index.ts" "$@"

@@ -1,0 +1,6 @@
+#!/bin/sh
+
+sleep 30 &
+child_pid=$!
+echo "$child_pid" > "$USAGEMUX_TEST_PID_FILE"
+wait

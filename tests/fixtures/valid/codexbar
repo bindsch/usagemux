@@ -1,0 +1,8 @@
+#!/bin/sh
+
+if [ "$1" != "--provider" ] || [ "$2" != "codex" ] || [ "$3" != "--format" ] || [ "$4" != "json" ] || [ "$5" != "--json-only" ]; then
+  echo "unexpected arguments" >&2
+  exit 2
+fi
+
+echo '{"provider":"codex","usage":{"primary":{"usedPercent":25}}}'
