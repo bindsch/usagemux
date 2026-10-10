@@ -2,6 +2,8 @@ import { readFileSync } from "node:fs";
 
 import { CodexBarBackend, type UsageBackend } from "./backend";
 import {
+  DEFAULT_CLIENTS,
+  MAX_TIMEOUT_SECONDS,
   SUPPORTED_CLIENTS,
   isSupportedClient,
   type Client,
@@ -10,7 +12,6 @@ import { formatSnapshotText } from "./format";
 import { createSnapshot, determineExitCode } from "./snapshot";
 
 const DEFAULT_TIMEOUT_SECONDS = 10;
-const MAX_TIMEOUT_SECONDS = 300;
 const USAGE_EXIT_CODE = 64;
 const UNEXPECTED_EXIT_CODE = 1;
 const PACKAGE_VERSION = readPackageVersion();
@@ -20,7 +21,7 @@ export const HELP_TEXT = `Usage:
 
 Options:
   --client <client>    Select a client; repeat to select more than one.
-  --all                Select all supported clients (the default).
+  --all                Select every supported client, agy included (the default set leaves agy out).
   --format <format>    Output format: text (default) or json.
   --timeout <seconds>  Per-provider timeout, up to ${MAX_TIMEOUT_SECONDS} seconds.
   -h, --help           Show help.
@@ -136,7 +137,7 @@ export function parseCliArgs(argv: string[]): ParsedCliArgs {
 
   return {
     kind: "snapshot",
-    clients: clients.length > 0 ? clients : [...SUPPORTED_CLIENTS],
+    clients: clients.length > 0 ? clients : all ? [...SUPPORTED_CLIENTS] : [...DEFAULT_CLIENTS],
     format,
     timeoutMs: timeoutSeconds * 1_000,
   };

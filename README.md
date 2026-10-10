@@ -44,14 +44,24 @@ usagemux snapshot --client codex --client claude
 usagemux snapshot --all --format json --timeout 15
 ```
 
-Supported clients are `aider`, `claude`, `cline`, `codex`, `copilot`, `cursor`,
-`droid`, `goose`, `gemini`, `opencode`, `pi`, `qwen`, and `zai`.
+Supported clients are `agy`, `aider`, `claude`, `cline`, `codex`, `copilot`,
+`cursor`, `droid`, `goose`, `gemini`, `kimi`, `opencode`, `openhands`, `pi`,
+`qwen`, and `zai`.
 
-`aider`, `goose`, and `pi` are provider-agnostic. Their results use the
-`not-applicable` status because the subscription belongs to their configured
-provider, not the client itself.
+`aider`, `goose`, `openhands`, and `pi` are provider-agnostic. Their results
+use the `not-applicable` status because the subscription belongs to their
+configured provider, not the client itself.
 
-The default is all clients in concise text format. Use `--format json` for the
+`kimi` maps to CodexBar's `kimi` provider, which reads the Kimi Code CLI's own
+credential (`~/.kimi-code/credentials/kimi-code.json`); run `kimi login` when
+it expires, since CodexBar does not refresh CLI-owned credentials. `agy` maps
+to CodexBar's `antigravity` provider, which probes the Antigravity language
+server and falls back to the `agy` CLI's Google OAuth credential; that probe
+outlasts the 10-second default timeout with the IDE closed, so `agy` is left
+out of the default client set: read it with `usagemux snapshot --client agy
+--timeout 90` or with `--all`.
+
+The default is every client except `agy`, in concise text format. Use `--format json` for the
 stable v1 envelope documented in [docs/PROTOCOL.md](docs/PROTOCOL.md).
 
 ## Development

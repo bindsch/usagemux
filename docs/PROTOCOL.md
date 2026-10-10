@@ -7,7 +7,9 @@ usagemux snapshot [--client <client> ...] [--all]
                   [--format json|text] [--timeout <seconds>]
 ```
 
-With neither `--client` nor `--all`, all clients are selected. `--client` is
+With neither `--client` nor `--all`, every client except `agy` is selected
+(`agy`'s provider probe can outlast the default timeout); `--all` selects
+every client, `agy` included. `--client` is
 repeatable. Combining it with `--all` is a usage error. The timeout applies to
 each provider call and defaults to 10 seconds.
 
@@ -55,6 +57,17 @@ are never nullable. Timestamps are ISO 8601 UTC strings.
 - `not-applicable`: the client is provider-agnostic.
 - `error`: the backend ran, but this provider failed or returned invalid data.
 
+For `error`, `message` preserves the backend's error detail. usagemux appends
+a remedy in two cases: when CodexBar reports a credential-less provider ("No
+available fetch strategy for ..."), which arrives as CodexBar's structured
+JSON error payload (a thrown backend error carries a "CodexBar failed for
+provider ..." prefix and is left as it is), and when usagemux's own per-call
+timeout fires ("CodexBar timed out after ...", a message usagemux itself
+produces). The timeout remedy names the `--timeout` cap and says when the run
+already used it. A timeout CodexBar reports inside its own JSON output gets
+no remedy, because a longer `--timeout` does not change CodexBar's internal
+budget.
+
 When CodexBar reports only `usedPercent`, `remainingPercent` is derived as
 `100 - usedPercent`. Normalized remaining percentages are clamped to 0–100.
 
@@ -75,6 +88,7 @@ window reset times and are otherwise `null`.
 
 | Client | CodexBar provider |
 | --- | --- |
+| agy | antigravity |
 | claude | claude |
 | cline | clinepass |
 | codex | codex |
@@ -82,11 +96,12 @@ window reset times and are otherwise `null`.
 | cursor | cursor |
 | droid | factory |
 | gemini | gemini |
+| kimi | kimi |
 | opencode | opencode |
 | qwen | qwencloud |
 | zai | zai |
 
-`aider`, `goose`, and `pi` have no provider mapping.
+`aider`, `goose`, `openhands`, and `pi` have no provider mapping.
 
 ## Exit codes
 

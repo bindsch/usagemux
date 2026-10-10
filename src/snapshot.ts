@@ -1,9 +1,11 @@
 import {
   CLIENT_PROVIDERS,
   getNotApplicableMessage,
+  withErrorRemedy,
   type Client,
 } from "./clients";
 import {
+  BackendTimeoutError,
   BackendUnavailableError,
   type UsageBackend,
 } from "./backend";
@@ -95,13 +97,23 @@ async function collectClientResult(
 
   try {
     const payload = await backend.fetch(executable, provider, timeoutMs);
-    return normalizeCodexBarPayload(payload, { client, provider });
+    const result = normalizeCodexBarPayload(payload, { client, provider });
+    if (result.status === "error" && result.message !== null) {
+      // CodexBar exits non-zero but still emits structured JSON for provider
+      // errors; those messages flow through the normalizer, not this catch.
+      return { ...result, message: withErrorRemedy(client, result.message) };
+    }
+    return result;
   } catch (error) {
     const message = errorMessage(error);
     if (error instanceof BackendUnavailableError) {
       return unavailableResult(client, provider, message);
     }
-    return errorResult(client, provider, message);
+    return errorResult(
+      client,
+      provider,
+      withErrorRemedy(client, message, { timeoutMs, ownTimeout: error instanceof BackendTimeoutError }),
+    );
   }
 }
 

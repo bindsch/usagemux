@@ -40,7 +40,7 @@ export class BackendUnavailableError extends Error {
   override name = "BackendUnavailableError";
 }
 
-class BackendTimeoutError extends Error {
+export class BackendTimeoutError extends Error {
   override name = "BackendTimeoutError";
 }
 

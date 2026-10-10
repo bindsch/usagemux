@@ -42,12 +42,18 @@ const backend: UsageBackend = {
 };
 
 describe("CLI arguments", () => {
-  test("defaults snapshot to all clients", () => {
+  test("defaults snapshot to every client except agy, and --all adds it back (review um2)", () => {
     const parsed = parseCliArgs(["snapshot"]);
     expect(parsed.kind).toBe("snapshot");
     if (parsed.kind === "snapshot") {
-      expect(parsed.clients).toHaveLength(13);
+      expect(parsed.clients).toHaveLength(15);
+      expect(parsed.clients).not.toContain("agy");
       expect(parsed.format).toBe("text");
+    }
+    const all = parseCliArgs(["snapshot", "--all"]);
+    if (all.kind === "snapshot") {
+      expect(all.clients).toHaveLength(16);
+      expect(all.clients).toContain("agy");
     }
   });
 

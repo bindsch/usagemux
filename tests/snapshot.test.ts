@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
+import { BackendTimeoutError } from "../src/backend";
 import {
   BackendUnavailableError,
   createSnapshot,
@@ -109,5 +110,99 @@ describe("snapshot orchestration", () => {
       message: "CodexBar could not be started.",
     });
     expect(determineExitCode(result)).toBe(69);
+  });
+
+  test("appends an actionable remedy to upstream no-strategy errors", async () => {
+    const result = await createSnapshot(
+      { clients: ["copilot", "kimi"], timeoutMs: 1_000 },
+      {
+        backend: backend({
+          fetch: async (_executable, provider) => {
+            if (provider === "copilot") {
+              throw new Error("No available fetch strategy for copilot.");
+            }
+            return { provider, usage: { primary: { usedPercent: 10 } } };
+          },
+        }),
+        now: () => NOW,
+      },
+    );
+
+    expect(result.results.map(({ status }) => status)).toEqual([
+      "error",
+      "ok",
+    ]);
+    expect(result.results[0]?.message).toContain(
+      "Add a Copilot account in CodexBar",
+    );
+    expect(result.results[1]?.message).toBe(null);
+    expect(determineExitCode(result)).toBe(0);
+  });
+
+  test("appends remedies to structured provider errors, not only thrown ones", async () => {
+    // CodexBar exits non-zero but still prints JSON for provider errors; the
+    // message arrives through the normalizer, not through a thrown Error.
+    const result = await createSnapshot(
+      { clients: ["copilot"], timeoutMs: 1_000 },
+      {
+        backend: backend({
+          fetch: async () => ({
+            provider: "copilot",
+            error: { message: "No available fetch strategy for copilot." },
+          }),
+        }),
+        now: () => NOW,
+      },
+    );
+
+    expect(result.results[0]?.status).toBe("error");
+    expect(result.results[0]?.message).toBe(
+      "No available fetch strategy for copilot. Add a Copilot account in CodexBar (menu > Add / switch account, GitHub device flow) or export COPILOT_API_TOKEN for the codexbar process; a plain gh auth token cannot authenticate to the Copilot usage API.",
+    );
+  });
+
+  test("appends the timeout remedy for slow providers", async () => {
+    const result = await createSnapshot(
+      { clients: ["agy"], timeoutMs: 1_000 },
+      {
+        backend: backend({
+          fetch: async () => {
+            throw new BackendTimeoutError("CodexBar timed out after 10000ms.");
+          },
+        }),
+        now: () => NOW,
+      },
+    );
+
+    expect(result.results[0]?.status).toBe("error");
+    expect(result.results[0]?.message).toContain(
+      "Retry with a longer --timeout (up to 300 seconds)",
+    );
+  });
+
+  test("reports kimi through the codexbar kimi provider", async () => {
+    const seenProviders: string[] = [];
+    const result = await createSnapshot(
+      { clients: ["kimi"], timeoutMs: 1_000 },
+      {
+        backend: backend({
+          fetch: async (_executable, provider) => {
+            seenProviders.push(provider);
+            return {
+              provider,
+              usage: { secondary: { usedPercent: 40, resetsAt: "2026-08-04T12:00:00Z" } },
+            };
+          },
+        }),
+        now: () => NOW,
+      },
+    );
+
+    expect(seenProviders).toEqual(["kimi"]);
+    expect(result.results[0]).toMatchObject({
+      client: "kimi",
+      provider: "kimi",
+      status: "ok",
+    });
   });
 });
