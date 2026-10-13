@@ -106,24 +106,24 @@ describe("error remedies", () => {
     );
   });
 
-  test("a timeout that already used the cap says so instead of suggesting a longer one (review um1)", () => {
+  test("a timeout that already used the cap says so instead of suggesting a longer one", () => {
     expect(withErrorRemedy("codex", "CodexBar timed out after 300000ms.", { timeoutMs: 300_000, ownTimeout: true })).toBe(
       "CodexBar timed out after 300000ms. The 300-second --timeout cap was already in use, so this provider is not answering.",
     );
   });
 
-  test("the kimi credential remedy names kimi login (review um2)", () => {
+  test("the kimi credential remedy names kimi login", () => {
     expect(withErrorRemedy("kimi", "No available fetch strategy for kimi.")).toContain("Run kimi login");
   });
 
-  test("a timeout CodexBar reports inside its own output gets no remedy (review um2)", () => {
+  test("a timeout CodexBar reports inside its own output gets no remedy", () => {
     expect(withErrorRemedy("codex", "CodexBar timed out after 10000ms.")).toBe("CodexBar timed out after 10000ms.");
     expect(withErrorRemedy("codex", "CodexBar timed out after 10000ms.", { ownTimeout: false })).toBe(
       "CodexBar timed out after 10000ms.",
     );
   });
 
-  test("the default client set leaves agy out and keeps every other client (review um2)", () => {
+  test("the default client set leaves agy out and keeps every other client", () => {
     expect(DEFAULT_CLIENTS).not.toContain("agy");
     expect(DEFAULT_CLIENTS.length).toBe(SUPPORTED_CLIENTS.length - 1);
   });

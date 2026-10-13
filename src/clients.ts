@@ -21,8 +21,8 @@ export type Client = (typeof SUPPORTED_CLIENTS)[number];
 
 /** The clients a bare `usagemux snapshot` reads. `agy` is opt-in: its
  * CodexBar provider probes the Antigravity language server and can outlast
- * the 10-second default timeout, which would turn every default snapshot
- * into a wait plus an error (review um2). `--all` or `--client agy` reads it. */
+ * the 10-second default timeout and delay a default snapshot.
+ * `--all` or `--client agy` reads it. */
 export const DEFAULT_CLIENTS: readonly Client[] = SUPPORTED_CLIENTS.filter(
   (client) => client !== "agy",
 );
@@ -100,7 +100,7 @@ export interface RemedyOptions {
   readonly timeoutMs?: number;
   /** True only when usagemux's own backend timeout fired. A timeout CodexBar
    * reports inside its JSON output is CodexBar's internal budget, which a
-   * longer `--timeout` does not change, so it gets no remedy (review um2). */
+   * longer `--timeout` does not change, so it gets no remedy. */
   readonly ownTimeout?: boolean;
 }
 

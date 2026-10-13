@@ -42,7 +42,7 @@ const backend: UsageBackend = {
 };
 
 describe("CLI arguments", () => {
-  test("defaults snapshot to every client except agy, and --all adds it back (review um2)", () => {
+  test("defaults snapshot to every client except agy, and --all adds it back", () => {
     const parsed = parseCliArgs(["snapshot"]);
     expect(parsed.kind).toBe("snapshot");
     if (parsed.kind === "snapshot") {
@@ -182,6 +182,29 @@ describe("CLI execution", () => {
     expect(capture.stdout.join("")).toContain(
       "primary: 60% remaining; resets 2026-08-04T10:00:00.000Z",
     );
+  });
+
+  test("JSON escapes terminal controls without changing decoded provider strings", async () => {
+    const capture = outputCapture();
+    const controls = String.fromCharCode(
+      ...Array.from({ length: 32 }, (_, index) => index),
+      ...Array.from({ length: 33 }, (_, index) => 0x7f + index),
+    );
+    const plan = `Pro ${controls} café \\u009b`;
+    const exitCode = await main(
+      ["snapshot", "--client", "codex", "--format", "json"],
+      {
+        backend: { ...backend, fetch: async () => ({ plan, source: plan }) },
+        io: capture.io,
+      },
+    );
+    const output = capture.stdout.join("");
+    expect(exitCode).toBe(0);
+    expect(capture.stderr).toEqual([]);
+    expect(output).not.toMatch(/[\u0000-\u0009\u000b-\u001f\u007f-\u009f]/);
+    expect(output).toContain("\\u007f");
+    expect(output).toContain("\\u009b");
+    expect(JSON.parse(output).results[0]).toMatchObject({ plan, source: plan });
   });
 
   test("returns 69 when the backend is missing", async () => {

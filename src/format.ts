@@ -2,9 +2,18 @@ import type { UsageResult, UsageSnapshot } from "./types";
 
 // Provider-supplied strings reach a terminal here. Escape C0/C1 control
 // characters and DEL so a hostile or compromised upstream response cannot move
-// the cursor, clear the screen, or drive terminal reporting sequences. The JSON
-// output path needs no equivalent: JSON.stringify already escapes them.
+// the cursor, clear the screen, or drive terminal reporting sequences.
 const CONTROL_CHARACTERS = /[\u0000-\u001F\u007F-\u009F]/g;
+const JSON_UNESCAPED_CONTROLS = /[\u007F-\u009F]/g;
+
+export function formatSnapshotJson(snapshot: UsageSnapshot): string {
+  // JSON.stringify escapes C0 in strings, but leaves DEL and C1 unchanged.
+  // Unicode escapes preserve the original strings when consumers parse JSON.
+  return `${JSON.stringify(snapshot, null, 2).replace(
+    JSON_UNESCAPED_CONTROLS,
+    (character) => `\\u${character.charCodeAt(0).toString(16).padStart(4, "0")}`,
+  )}\n`;
+}
 
 export function escapeForTerminal(value: string): string {
   return value.replace(

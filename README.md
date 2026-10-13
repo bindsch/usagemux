@@ -1,85 +1,61 @@
 # usagemux
 
-`usagemux` exposes subscription usage from coding-agent clients through one
-small, versioned command-line protocol. It is designed to be an optional
-integration: callers remain fully functional when `usagemux` or its backend is
-not installed.
+`usagemux` reads subscription usage through CodexBar and returns a versioned
+JSON snapshot or concise text. Results can include quota windows, credits,
+account metadata, and subscription dates. Missing measurements stay unknown.
 
-The MVP uses [CodexBar](https://github.com/steipete/CodexBar) as its backend.
-`usagemux` locates the `codexbar` executable on `PATH`, invokes it directly
-without a shell, and normalizes its JSON output. Credentials are never passed
-in command-line arguments. Results include quota percentages and resets,
-credits, provider source, plan/account metadata, and subscription renewal or
-expiry timestamps when the provider reports them.
+## Requirements and installation
 
-## Requirements
+The source launcher supports macOS and Linux and requires Bun 1.3 or newer.
+Development and CI use Bun 1.3.14. Applicable clients require the separate
+[CodexBar CLI](https://github.com/steipete/CodexBar/blob/main/docs/cli.md).
+Installing the macOS app alone does not expose its CLI on `PATH`.
 
-- Bun 1.3 or newer
-- CodexBar CLI for applicable clients
-
-The source launcher supports macOS and Linux. It accepts Bun from Homebrew's
-standard prefixes or `$HOME/.bun/bin/bun`; this fixed lookup prevents a project
-directory from substituting a hostile interpreter through `PATH`.
-
-## Install
+After installing Bun and the CodexBar CLI:
 
 ```sh
-bun install
+git clone https://github.com/bindsch/usagemux.git
+cd usagemux
+git checkout v0.2.0
+make install
 make link
+usagemux --version
+usagemux snapshot --client aider
 ```
 
-Use `make link` rather than bare `bun link`: Bun currently broadens the source
-launcher's mode while registering a package, and the target must be restored to
-`0755` for Codemux's executable trust check.
+Keep this checkout: the linked launcher reads its source files at runtime.
+See [installation](docs/INSTALLATION.md) for setup, compatibility evidence,
+updates, removal, and launcher troubleshooting.
 
-CodexBar remains optional. Provider-agnostic clients can be identified without
-it, and downstream tools can treat exit code 69 as an unavailable optional
-integration.
-
-## Usage
+## First snapshot
 
 ```sh
 usagemux snapshot
-usagemux snapshot --client codex --client claude
-usagemux snapshot --all --format json --timeout 15
+usagemux snapshot --client codex --client claude --format json
+usagemux snapshot --all --timeout 90
 ```
 
-Supported clients are `agy`, `aider`, `claude`, `cline`, `codex`, `copilot`,
-`cursor`, `droid`, `goose`, `gemini`, `kimi`, `opencode`, `openhands`, `pi`,
-`qwen`, and `zai`.
+The default selects every supported client except `agy`. `--all` changes
+selection only; the last example also increases the per-provider timeout.
 
-`aider`, `goose`, `openhands`, and `pi` are provider-agnostic. Their results
-use the `not-applicable` status because the subscription belongs to their
-configured provider, not the client itself.
+The [provider guide](docs/PROVIDERS.md) lists all client mappings, credential
+setup, and limitations. Provider-agnostic clients need no backend and return
+`not-applicable`. An `ok` result can have no usable quota measurement.
+Provider errors can accompany exit code zero; integrations must inspect
+[statuses and metric availability](docs/PROTOCOL.md).
 
-`kimi` maps to CodexBar's `kimi` provider, which reads the Kimi Code CLI's own
-credential (`~/.kimi-code/credentials/kimi-code.json`); run `kimi login` when
-it expires, since CodexBar does not refresh CLI-owned credentials. `agy` maps
-to CodexBar's `antigravity` provider, which probes the Antigravity language
-server and falls back to the `agy` CLI's Google OAuth credential; that probe
-outlasts the 10-second default timeout with the IDE closed, so `agy` is left
-out of the default client set: read it with `usagemux snapshot --client agy
---timeout 90` or with `--all`.
+## Documentation
 
-The default is every client except `agy`, in concise text format. Use `--format json` for the
-stable v1 envelope documented in [docs/PROTOCOL.md](docs/PROTOCOL.md).
-
-## Development
-
-```sh
-make check
-make coverage
-```
-
-The project has no runtime package dependencies. TypeScript and Bun types are
-development-only dependencies.
-
-The launcher selects and validates Bun from standard install locations instead
-of trusting the caller's `PATH`. The CodexBar backend rejects executables inside
-the caller's working tree, filters executable search paths and code-loader
-environment variables, and terminates the full provider process group on
-timeout or output overflow.
+- [Installation](docs/INSTALLATION.md): prerequisites, linking, updates, removal.
+- [CLI reference](docs/CLI.md): syntax, defaults, text output, exit codes.
+- [JSON protocol](docs/PROTOCOL.md): schema, normalization, consumer example.
+- [Providers](docs/PROVIDERS.md): mappings, credentials, known limitations.
+- [Backend reference](docs/BACKEND.md): discovery, trust rules, resource limits.
+- [Development](docs/DEVELOPMENT.md): checks and optional contributor hooks.
+- [Changelog](CHANGELOG.md): release history and unreleased changes.
 
 ## License
 
-MIT
+[MIT](LICENSE). CodexBar is a separate upstream dependency and is not bundled.
+The repository has no runtime package dependencies or vendored third-party
+implementation. Development dependencies retain their own licenses.

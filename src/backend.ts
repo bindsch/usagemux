@@ -331,7 +331,7 @@ function signalProcess(
   try {
     processHandle.kill(signal);
   } catch {
-    // Signalling an already-exited process is harmless.
+    // Signaling an already-exited process is harmless.
   }
 }
 

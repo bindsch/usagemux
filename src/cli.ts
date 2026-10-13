@@ -8,7 +8,7 @@ import {
   isSupportedClient,
   type Client,
 } from "./clients";
-import { formatSnapshotText } from "./format";
+import { formatSnapshotJson, formatSnapshotText } from "./format";
 import { createSnapshot, determineExitCode } from "./snapshot";
 
 const DEFAULT_TIMEOUT_SECONDS = 10;
@@ -17,15 +17,20 @@ const UNEXPECTED_EXIT_CODE = 1;
 const PACKAGE_VERSION = readPackageVersion();
 
 export const HELP_TEXT = `Usage:
-  usagemux snapshot [--client <client> ...] [--all] [--format json|text] [--timeout <seconds>]
+  usagemux snapshot [--client <client> ... | --all] [--format json|text] [--timeout <seconds>]
+  usagemux --help | -h
+  usagemux snapshot --help | -h
+  usagemux --version | -v
 
 Options:
-  --client <client>    Select a client; repeat to select more than one.
-  --all                Select every supported client, agy included (the default set leaves agy out).
+  --client <client>    Select clients in first-occurrence order; duplicates are ignored.
+  --all               Select every supported client; mutually exclusive with --client.
   --format <format>    Output format: text (default) or json.
-  --timeout <seconds>  Per-provider timeout, up to ${MAX_TIMEOUT_SECONDS} seconds.
-  -h, --help           Show help.
-  -v, --version        Show version.
+  --timeout <seconds>  Per-provider timeout: >0 to ${MAX_TIMEOUT_SECONDS} seconds; default ${DEFAULT_TIMEOUT_SECONDS}; fractions allowed.
+
+With no selection, every client except agy is selected.
+Value options accept --option=value; the last format or timeout value wins.
+Help and version accept only the standalone forms above, without other options.
 
 Clients:
   ${SUPPORTED_CLIENTS.join(", ")}
@@ -166,7 +171,7 @@ export async function main(
     });
     io.stdout(
       parsed.format === "json"
-        ? `${JSON.stringify(snapshot, null, 2)}\n`
+        ? formatSnapshotJson(snapshot)
         : formatSnapshotText(snapshot),
     );
     return determineExitCode(snapshot);
