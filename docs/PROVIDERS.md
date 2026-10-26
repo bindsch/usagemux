@@ -47,7 +47,7 @@ The shipped credential advice is:
 
 | Client | Setup |
 | --- | --- |
-| kimi | Run `kimi login` to establish or renew the CLI credential at `~/.kimi-code/credentials/kimi-code.json`, or export `KIMI_CODE_API_KEY` for the backend process. CodexBar does not refresh CLI-owned credentials. See the [Kimi authentication reference](https://github.com/steipete/CodexBar/blob/main/docs/kimi.md). |
+| kimi | Run `kimi login` to establish or renew the CLI credential at `~/.kimi-code/credentials/kimi-code.json` (or under `KIMI_CODE_HOME`), or export `KIMI_CODE_API_KEY` for the backend process. The CLI's access token lives 15 minutes and only the CLI refreshes it, so CodexBar can read Kimi usage only within about 15 minutes of a kimi run; at other times usagemux reports "usage unknown" with the reason instead of CodexBar's "invalid or expired" (see [error remedies](PROTOCOL.md)). CodexBar does not refresh CLI-owned credentials. See the [Kimi authentication reference](https://github.com/steipete/CodexBar/blob/main/docs/kimi.md). |
 | copilot | Add a Copilot account in CodexBar using its GitHub device flow, or export `COPILOT_API_TOKEN`. The shipped remedy identifies a plain `gh auth token` as unsuitable for the Copilot usage API. |
 | cline | Install the Cline CLI and run `cline auth`, or add a ClinePass API key in CodexBar under Settings > Providers > ClinePass. |
 | Other mapped clients | Add the provider account in CodexBar and follow its authentication diagnostic and provider guide. |

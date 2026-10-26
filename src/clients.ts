@@ -1,3 +1,5 @@
+import { kimiTokenAgedOut } from "./credentials";
+
 export const SUPPORTED_CLIENTS = [
   "agy",
   "aider",
@@ -102,9 +104,24 @@ export interface RemedyOptions {
    * reports inside its JSON output is CodexBar's internal budget, which a
    * longer `--timeout` does not change, so it gets no remedy. */
   readonly ownTimeout?: boolean;
+  /** For tests: whether the Kimi CLI token has aged out (default: read the
+   * CLI credential file's expiry). */
+  readonly kimiAgedOut?: boolean;
 }
 
+// CodexBar's message when the Kimi Code CLI's access token is stale. That token
+// lives 15 minutes and only the CLI refreshes it, so the message misleads
+// whenever the token simply aged out; usagemux replaces it in that case.
+const KIMI_STALE_MARKER = "credential is invalid or expired";
+export const KIMI_AGED_OUT_MESSAGE =
+  "Kimi usage unknown: the Kimi Code CLI's access token lives 15 minutes and has aged out, and CodexBar "
+  + "never refreshes it. kimi refreshes it on its next run, so this is not by itself a sign-in problem. "
+  + "If kimi itself also fails, run kimi login.";
+
 export function withErrorRemedy(client: Client, message: string, options: RemedyOptions = {}): string {
+  if (client === "kimi" && message.includes(KIMI_STALE_MARKER) && (options.kimiAgedOut ?? kimiTokenAgedOut())) {
+    return KIMI_AGED_OUT_MESSAGE;
+  }
   let remedy: string | undefined;
   if (message.startsWith(NO_STRATEGY_PREFIX)) {
     remedy = NO_STRATEGY_REMEDIES[client] ?? GENERIC_NO_STRATEGY_REMEDY;

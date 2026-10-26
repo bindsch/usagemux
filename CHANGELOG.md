@@ -7,6 +7,15 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+### Fixed
+
+- Kimi: replace CodexBar's "credential is invalid or expired" with the actual
+  reason when the Kimi Code CLI's 15-minute access token has aged out (a
+  refresh token is present and `expires_at` is within CodexBar's 60-second
+  margin or past it). kimi refreshes that token on its next run; CodexBar never
+  does. Honors `KIMI_CODE_HOME`; reads only the expiry and the presence of a
+  refresh token; does not claim the sign-in is valid.
+
 ## [0.2.1] - 2026-10-13
 
 ### Fixed

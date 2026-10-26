@@ -167,6 +167,14 @@ diagnostic. See [capture limits](BACKEND.md#execution-and-limits).
   Advice accounts for `options.timeoutMs` and the CLI timeout cap.
   Backend-reported timeouts do not meet this condition.
 
+One message is replaced rather than extended: for client `kimi`, a message
+containing `credential is invalid or expired` becomes an explanation that the
+Kimi Code CLI's 15-minute access token aged out, when the CLI credential at
+`$KIMI_CODE_HOME/credentials/kimi-code.json` (default `~/.kimi-code`) holds a
+refresh token and its `expires_at` is within 60 seconds of now or past it, the
+margin CodexBar uses. Only those two fields are read. The replacement does not
+claim the sign-in is valid, since a revoked refresh token looks the same.
+
 All other messages remain unchanged. Remedies do not change result status.
 
 Text uses the [CLI display escapes](CLI.md#output). JSON serialization escapes
