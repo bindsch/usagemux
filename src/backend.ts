@@ -1,5 +1,6 @@
 import { constants } from "node:fs";
 import { access, realpath, stat } from "node:fs/promises";
+import type { ReadableStreamDefaultReader } from "node:stream/web";
 import {
   delimiter,
   dirname,
@@ -13,6 +14,7 @@ export const CODEXBAR_EXECUTABLE = "codexbar";
 export const MAX_OUTPUT_BYTES = 512 * 1024;
 const MAX_ERROR_DETAIL_CHARS = 8 * 1024;
 const PROCESS_TERMINATION_GRACE_MS = 250;
+const CLEANUP_WAIT_CAP_MS = 2_000;
 const FORBIDDEN_ENV_NAMES = new Set([
   "BASH_ENV",
   "BUN_OPTIONS",
@@ -33,7 +35,15 @@ const FORBIDDEN_ENV_PREFIXES = ["DYLD_", "LD_"] as const;
 
 export interface UsageBackend {
   findExecutable(): Promise<string | null>;
-  fetch(executable: string, provider: string, timeoutMs: number): Promise<unknown>;
+  /** Builds the child environment once per snapshot; every provider call in
+   * the snapshot shares the result. */
+  buildEnvironment(): Promise<Record<string, string>>;
+  fetch(
+    executable: string,
+    provider: string,
+    timeoutMs: number,
+    environment: Record<string, string>,
+  ): Promise<unknown>;
 }
 
 export class BackendUnavailableError extends Error {
@@ -49,12 +59,17 @@ export class CodexBarBackend implements UsageBackend {
     return findCodexBarExecutable(process.env.PATH, process.cwd());
   }
 
+  async buildEnvironment(): Promise<Record<string, string>> {
+    return buildBackendEnvironment(process.env, process.cwd());
+  }
+
   async fetch(
     executable: string,
     provider: string,
     timeoutMs: number,
+    environment: Record<string, string>,
   ): Promise<unknown> {
-    return runCodexBar(executable, provider, timeoutMs);
+    return runCodexBar(executable, provider, timeoutMs, environment);
   }
 }
 
@@ -70,53 +85,80 @@ export async function findCodexBarExecutable(
     if (!directory || !isAbsolute(directory)) {
       continue;
     }
-    const candidate = join(directory, CODEXBAR_EXECUTABLE);
-    try {
-      const resolved = await realpath(candidate);
-      const metadata = await stat(resolved);
-      if (!metadata.isFile()) {
-        continue;
-      }
-      if (process.platform !== "win32") {
-        if ((metadata.mode & 0o022) !== 0) {
-          continue;
-        }
-        if (
-          typeof process.getuid === "function" &&
-          metadata.uid !== process.getuid() &&
-          metadata.uid !== 0
-        ) {
-          continue;
-        }
-      }
-      if (!(await isTrustedDirectoryChain(dirname(resolved), forbiddenRoot))) {
-        continue;
-      }
-      await access(resolved, constants.X_OK);
+    const resolved = await validateTrustedExecutable(
+      join(directory, CODEXBAR_EXECUTABLE),
+      forbiddenRoot,
+    );
+    if (resolved !== null) {
       return resolved;
-    } catch {
-      // Missing, inaccessible, or non-executable PATH entries are skipped.
     }
   }
 
   return null;
 }
 
+/** Runs the full discovery validation on one candidate and returns its
+ * resolved real path, or null when any rule fails: the candidate is
+ * resolved through symlinks, must be a regular file owned by the current
+ * user or root without group or world write bits, must be executable, and
+ * its resolved directory chain must be trusted and outside the forbidden
+ * root. */
+async function validateTrustedExecutable(
+  candidate: string,
+  forbiddenRoot: string,
+): Promise<string | null> {
+  try {
+    const resolved = await realpath(candidate);
+    const metadata = await stat(resolved);
+    if (!metadata.isFile()) {
+      return null;
+    }
+    if (process.platform !== "win32") {
+      if ((metadata.mode & 0o022) !== 0) {
+        return null;
+      }
+      if (
+        typeof process.getuid === "function" &&
+        metadata.uid !== process.getuid() &&
+        metadata.uid !== 0
+      ) {
+        return null;
+      }
+    }
+    if (!(await isTrustedDirectoryChain(dirname(resolved), forbiddenRoot))) {
+      return null;
+    }
+    await access(resolved, constants.X_OK);
+    return resolved;
+  } catch {
+    // Missing, inaccessible, or non-executable candidates are not trusted.
+    return null;
+  }
+}
+
 export async function runCodexBar(
   executable: string,
   provider: string,
   timeoutMs: number,
+  environment?: Record<string, string>,
 ): Promise<unknown> {
-  let processHandle: ReturnType<typeof Bun.spawn>;
-  const useProcessGroup = process.platform !== "win32";
-  const environment = await buildBackendEnvironment(
+  // Resolve the environment first, on both call paths: the trust re-check
+  // below is the last thing before the spawn, so a backend swapped while
+  // the environment is being built still fails the re-check.
+  const childEnvironment = environment ?? await buildBackendEnvironment(
     process.env,
     process.cwd(),
   );
+  const resolvedExecutable = await assertExecutableTrusted(
+    executable,
+    process.cwd(),
+  );
+  let processHandle: ReturnType<typeof Bun.spawn>;
+  const useProcessGroup = process.platform !== "win32";
   try {
     processHandle = Bun.spawn(
       [
-        executable,
+        resolvedExecutable,
         "--provider",
         provider,
         "--format",
@@ -127,8 +169,8 @@ export async function runCodexBar(
         stdin: "ignore",
         stdout: "pipe",
         stderr: "pipe",
-        cwd: dirname(executable),
-        env: environment,
+        cwd: dirname(resolvedExecutable),
+        env: childEnvironment,
         detached: useProcessGroup,
       },
     );
@@ -150,13 +192,15 @@ export async function runCodexBar(
     throw new BackendUnavailableError("CodexBar output pipes were unavailable.");
   }
 
+  const stdoutReader = stdoutStream.getReader();
+  const stderrReader = stderrStream.getReader();
   const stdoutPromise = readBounded(
-    stdoutStream,
+    stdoutReader,
     MAX_OUTPUT_BYTES,
     "stdout",
   );
   const stderrPromise = readBounded(
-    stderrStream,
+    stderrReader,
     MAX_OUTPUT_BYTES,
     "stderr",
   );
@@ -192,11 +236,38 @@ export async function runCodexBar(
       await Bun.sleep(PROCESS_TERMINATION_GRACE_MS);
     }
     signalProcess(processHandle, "SIGKILL", useProcessGroup);
-    await Promise.allSettled([
+    // A descendant outside the process group can keep a pipe open forever.
+    // Wait for the readers at most a fixed cap; if the cap fires, cancel the
+    // streams so the pending reads release and the command can exit.
+    const settled = Promise.allSettled([
       stdoutPromise,
       stderrPromise,
       processHandle.exited,
     ]);
+    // The cap's timer must be cleared once the race settles, or the
+    // scheduled sleep keeps the process alive for the full cap after an
+    // ordinary provider error.
+    let capTimeout: ReturnType<typeof setTimeout> | undefined;
+    const capReached = new Promise<boolean>((resolve) => {
+      capTimeout = setTimeout(() => resolve(true), CLEANUP_WAIT_CAP_MS);
+    });
+    try {
+      if (await Promise.race([settled.then(() => false), capReached])) {
+        // Release both reader locks, then cancel the streams: that closes
+        // the pipe handles, so the pending reads release and the command
+        // exits instead of waiting for the escaped descendant.
+        stdoutReader.releaseLock();
+        stderrReader.releaseLock();
+        await Promise.allSettled([
+          stdoutStream.cancel().catch(() => undefined),
+          stderrStream.cancel().catch(() => undefined),
+        ]);
+      }
+    } finally {
+      if (capTimeout) {
+        clearTimeout(capTimeout);
+      }
+    }
     throw error;
   } finally {
     if (timeout) {
@@ -252,6 +323,25 @@ async function trustedPath(
     }
   }
   return directories.join(delimiter);
+}
+
+/** Re-validates the executable immediately before each spawn by re-running
+ * the full discovery validation, and returns the resolved real path to
+ * spawn. Discovery runs once per snapshot, so this closes most of the
+ * replacement window between discovery and a later spawn; re-resolving
+ * here also refuses a path whose file was replaced by a symlink after
+ * discovery. */
+async function assertExecutableTrusted(
+  executable: string,
+  forbiddenRoot: string,
+): Promise<string> {
+  const resolved = await validateTrustedExecutable(executable, forbiddenRoot);
+  if (resolved === null) {
+    throw new BackendUnavailableError(
+      `CodexBar failed its trust re-check immediately before launch: ${executable}`,
+    );
+  }
+  return resolved;
 }
 
 async function isTrustedDirectoryChain(
@@ -335,12 +425,14 @@ function signalProcess(
   }
 }
 
+/** Reads a bounded amount of text from an already-acquired reader. The
+ * caller keeps the option to release the lock and cancel the stream when a
+ * read can never settle. */
 async function readBounded(
-  stream: ReadableStream<Uint8Array>,
+  reader: ReadableStreamDefaultReader<Uint8Array<ArrayBuffer>>,
   byteLimit: number,
   label: string,
 ): Promise<string> {
-  const reader = stream.getReader();
   const decoder = new TextDecoder();
   let bytesRead = 0;
   let value = "";

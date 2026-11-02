@@ -81,4 +81,33 @@ describe("formatSnapshotText", () => {
     );
     expect(failed).not.toContain(ESC);
   });
+
+  test("rounds numbers to at most two decimals without trailing zeros", () => {
+    const window = (kind: string, remainingPercent: number) => ({
+      kind,
+      usedPercent: 100 - remainingPercent,
+      remainingPercent,
+      windowMinutes: null,
+      resetsAt: null,
+    });
+    const text = formatSnapshotText(
+      snapshot([
+        result({
+          windows: [
+            window("primary", 83.565657),
+            window("secondary", 33.456),
+            window("monthly", 95.5),
+            window("daily", 66),
+          ],
+          credits: { remaining: 17.456, unit: "USD" },
+        }),
+      ]),
+    );
+
+    expect(text).toContain("primary: 83.57% remaining");
+    expect(text).toContain("secondary: 33.46% remaining");
+    expect(text).toContain("monthly: 95.5% remaining");
+    expect(text).toContain("daily: 66% remaining");
+    expect(text).toContain("credits: 17.46 USD remaining");
+  });
 });

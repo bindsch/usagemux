@@ -13,6 +13,7 @@ const NOW = new Date("2026-08-03T10:00:00Z");
 function backend(overrides: Partial<UsageBackend> = {}): UsageBackend {
   return {
     findExecutable: async () => "/trusted/codexbar",
+    buildEnvironment: async () => ({}),
     fetch: async (_executable, provider) => ({
       provider,
       usage: { primary: { usedPercent: 25 } },
@@ -157,7 +158,7 @@ describe("snapshot orchestration", () => {
 
     expect(result.results[0]?.status).toBe("error");
     expect(result.results[0]?.message).toBe(
-      "No available fetch strategy for copilot. Add a Copilot account in CodexBar (menu > Add / switch account, GitHub device flow) or export COPILOT_API_TOKEN for the codexbar process; a plain gh auth token cannot authenticate to the Copilot usage API.",
+      "No available fetch strategy for copilot. Add a Copilot account in CodexBar (menu > Add / switch account, GitHub device flow); a plain gh auth token cannot authenticate to the Copilot usage API.",
     );
   });
 
@@ -204,5 +205,71 @@ describe("snapshot orchestration", () => {
       provider: "kimi",
       status: "ok",
     });
+  });
+
+  test("not-applicable mixed with unavailable still exits 69", async () => {
+    const result = await createSnapshot(
+      { clients: ["aider", "codex"], timeoutMs: 1_000 },
+      {
+        backend: backend({ findExecutable: async () => null }),
+        now: () => NOW,
+      },
+    );
+
+    expect(result.results.map(({ status }) => status)).toEqual([
+      "not-applicable",
+      "unavailable",
+    ]);
+    expect(determineExitCode(result)).toBe(69);
+  });
+
+  test("unavailable mixed with error exits 0", async () => {
+    const result = await createSnapshot(
+      { clients: ["codex", "claude"], timeoutMs: 1_000 },
+      {
+        backend: backend({
+          fetch: async (_executable, provider) => {
+            if (provider === "claude") {
+              throw new BackendUnavailableError("CodexBar could not be started.");
+            }
+            throw new Error("provider request failed");
+          },
+        }),
+        now: () => NOW,
+      },
+    );
+
+    expect(result.results.map(({ status }) => status)).toEqual([
+      "error",
+      "unavailable",
+    ]);
+    expect(determineExitCode(result)).toBe(0);
+  });
+
+  test("builds the child environment once per snapshot and shares it", async () => {
+    const shared = { PATH: "/usr/bin" };
+    const seen: unknown[] = [];
+    let builds = 0;
+    const result = await createSnapshot(
+      { clients: ["codex", "claude"], timeoutMs: 1_000 },
+      {
+        backend: backend({
+          buildEnvironment: async () => {
+            builds += 1;
+            return shared;
+          },
+          fetch: async (_executable, provider, _timeoutMs, environment) => {
+            seen.push(environment);
+            return { provider, usage: { primary: { usedPercent: 25 } } };
+          },
+        }),
+        now: () => NOW,
+      },
+    );
+
+    expect(builds).toBe(1);
+    expect(result.results.map(({ status }) => status)).toEqual(["ok", "ok"]);
+    expect(seen[0]).toBe(shared);
+    expect(seen[1]).toBe(shared);
   });
 });

@@ -62,12 +62,12 @@ are ISO 8601 UTC strings. Missing optional upstream values generally become null
 | `subscriptionExpiresAt` | timestamp string or null | Subscription expiry date; null when absent or status is not `ok`. |
 | `message` | string or null | Null for `ok`; explanation for other statuses. Upstream errors can supply an empty string. |
 | `windows[].kind` | string | Extensible identifier; consumers must accept unfamiliar kinds. |
-| `windows[].usedPercent` | number or null | Used percentage clamped to 0–100; null when unknown. |
-| `windows[].remainingPercent` | number or null | Remaining percentage clamped to 0–100; null when unknown. |
-| `windows[].windowMinutes` | number or null | Finite duration value from upstream; no positivity or integer constraint. |
+| `windows[].usedPercent` | number or null | Used percentage clamped to 0–100 and rounded to two decimals; null when unknown. |
+| `windows[].remainingPercent` | number or null | Remaining percentage clamped to 0–100 and rounded to two decimals; null when unknown. |
+| `windows[].windowMinutes` | number or null | Non-negative finite duration from upstream; a negative or non-finite upstream value is emitted as null, as is an absent one. No integer constraint. |
 | `windows[].resetsAt` | timestamp string or null | Quota reset time, independent of subscription dates. |
 | `credits.remaining` | number | Finite balance; not clamped, and may be negative or fractional. |
-| `credits.unit` | string | Upstream unit, or `"credits"` when omitted or null. |
+| `credits.unit` | string | Upstream unit, or `"credits"` when omitted, null, or empty. |
 
 ## Statuses and cardinality
 
@@ -75,7 +75,10 @@ are ISO 8601 UTC strings. Missing optional upstream values generally become null
   with no windows, credits, or dates. Check the metrics you need.
 - `unavailable`: no trusted backend was found, or the backend could not be
   started or its output pipes were unavailable.
-- `not-applicable`: the client is provider-agnostic; no backend fetch occurs.
+- `not-applicable`: no backend fetch occurs, either because the client is
+  provider-agnostic (usage belongs to its configured provider) or because
+  the client is `pi`, whose CodexBar provider's usage reporting is not yet
+  verified.
 - `error`: provider failure, timeout, output overflow, malformed JSON, or
   invalid recognized data. Metrics are empty for the entire provider result.
 
@@ -83,6 +86,13 @@ Invalid recognized fields can invalidate a whole provider result. The
 normalizer validates types of fields it reads, including some fallback fields
 even when a higher-priority value exists. This is not a complete upstream
 schema validator; unused fields may be ignored.
+
+Numeric fields must arrive as JSON numbers. A numeric string such as
+`"84"` is invalid and invalidates the provider result. This is deliberately
+stricter than the Kimi CLI credential reader, which accepts epochs written as
+strings because the CLI itself writes them that way; provider payloads are
+third-party output, where a numeric string signals a schema change rather
+than a known convention.
 
 An upstream object is accepted when its provider is absent, null, or matches
 the requested provider. An upstream array must be nonempty and contain only
@@ -105,15 +115,21 @@ Collection order is:
 A window with `isSyntheticPlaceholder: true` is omitted. No deduplication
 occurs. A window's own `kind` takes precedence; otherwise named windows use
 their name, array windows use `<array-name>-<one-based-index>`, and extra
-windows use `id`, then `title`, then `extra-<one-based-index>`.
+windows use `id`, then `title`, then `extra-<one-based-index>`. An empty
+`kind`, `id`, or `title` string is treated as absent, so the next fallback
+label applies.
 
 For extra windows, `usageKnown: false` on the enclosing entry forces both
 percentages to null, even if numbers are present. Otherwise explicit
 `remainingPercent` wins; when it is missing or null, remaining is derived
 as `100 - usedPercent` if used is known. Both percentages are clamped
-independently to 0–100. They need not sum to 100 when both were supplied.
-Invalid percentage types still fail validation even when usage is unknown.
-`resetsAt` takes precedence over `resetAt`, including an explicit null.
+independently to 0–100 and rounded to two decimals at emit, so JSON and text
+carry identical values; derived remaining is computed from the rounded used
+value. They need not sum to 100 when both were supplied. Invalid percentage
+types still fail validation even when usage is unknown.
+
+`resetsAt` takes precedence over `resetAt` everywhere, including an explicit
+null: a null `resetsAt` never falls back to `resetAt`.
 
 ### Credits, dates, and identity
 
@@ -122,11 +138,13 @@ balance and unit semantics.
 
 Subscription dates prefer non-null `usage` fields over top-level fields.
 Without an explicit renewal date, the first extra window with `id: "renewal"`
-supplies `window.resetsAt`, falling back to `window.resetAt` if null or absent.
-Renewal entries are removed from quota windows. There is no equivalent
-expiry fallback. Non-null explicit dates take precedence over the renewal
-window. Input dates must be strings accepted by JavaScript's date parser;
-output dates are normalized to UTC.
+supplies `window.resetsAt`, falling back to `window.resetAt` only when
+`resetsAt` is absent, under the precedence stated above. A renewal entry
+whose `window` is absent or not an object contributes no date and does not
+fail the result. Renewal entries are removed from quota windows. There is no
+equivalent expiry fallback. Non-null explicit dates take precedence over the
+renewal window. Input dates must be strings accepted by JavaScript's date
+parser; output dates are normalized to UTC.
 
 The first non-null string wins in these metadata lists (an empty string counts):
 
@@ -178,11 +196,11 @@ claim the sign-in is valid, since a revoked refresh token looks the same.
 All other messages remain unchanged. Remedies do not change result status.
 
 Text uses the [CLI display escapes](CLI.md#output). JSON serialization escapes
-C0 inside strings; the unreleased formatter also escapes DEL and C1 as
+C0 inside strings; since 0.2.1 the JSON formatter also escapes DEL and C1 as
 `\u00NN`. JSON parsing restores those characters, so consumers must escape
-decoded strings before displaying them in terminals. Releases through v0.2.0
-leave DEL and C1 raw in JSON. This is control-character escaping, not removal
-of all Unicode characters that may affect visual presentation.
+decoded strings before displaying them in terminals. This is control-character
+escaping, not removal of all Unicode characters that may affect visual
+presentation.
 
 ## Consumer example
 

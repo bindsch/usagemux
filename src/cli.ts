@@ -214,8 +214,11 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-function readPackageVersion(): string {
-  const packageUrl = new URL("../package.json", import.meta.url);
+/** Reads the version printed by `--version`. The URL parameter exists so
+ * tests can exercise the malformed-manifest path. */
+export function readPackageVersion(
+  packageUrl: URL = new URL("../package.json", import.meta.url),
+): string {
   const parsed = JSON.parse(readFileSync(packageUrl, "utf8")) as {
     version?: unknown;
   };

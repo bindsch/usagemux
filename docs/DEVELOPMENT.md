@@ -17,9 +17,29 @@ make coverage
 
 `make install` uses `bun install --frozen-lockfile`.
 The full gate, `make check`, runs TypeScript checking, the complete Bun test
-suite, and `sh -n bin/usagemux`. The repository has no separate lint or
-documentation-check target. `make coverage` is a separate coverage report.
-Neither command requires a real CodexBar installation or provider login.
+suite with an lcov report, a per-file coverage floor of 80% on functions and
+lines for every `.ts` and `.tsx` file under `src/`
+(`scripts/check-source-coverage.ts`), a
+500-line ceiling on every TypeScript file under `src/` and `scripts/`
+(`tests/file-size.test.ts`), and `sh -n bin/usagemux`. The floor exempts
+`src/index.ts` and `src/types.ts`: `src/index.ts` is the CLI entry point,
+exercised through a real launcher subprocess that Bun's in-process reporter
+cannot measure; `src/types.ts` holds type declarations and one exported
+constant with no branches. Neither can appear in the lcov report. A file
+that outgrows the ceiling is split into focused modules, not exempted.
+Before the test run the gate removes the previous `coverage/lcov.info` and
+any `.lcov.info.*.tmp` leftovers and touches `coverage/.run-stamp`; the
+floor refuses a report that is missing or older than that stamp, so only a
+report the current run wrote can pass, and it refuses a record that lacks
+any of its `LF`/`LH`/`FNF`/`FNH` summary lines, carries a counter that is
+not a non-negative integer, or reports more hit than found lines or
+functions, instead of scoring the record as covered. Bun writes `lcov.info`
+by renaming a
+temp file onto it, which fails with `EPERM` where a sandbox forbids
+replacing the existing file; removing the old report first is the
+mitigation. The repository has no separate lint or documentation-check
+target. `make coverage` is a separate coverage report. Neither command
+requires a real CodexBar installation or provider login.
 
 Tests use fake backends and local executable fixtures. They create and remove
 temporary directories, change fixture permissions, and launch fixture
@@ -44,9 +64,10 @@ repository or required by `make check`.
 | `src/cli.ts`, `src/index.ts` | Arguments, entry point, output, exit codes. |
 | `src/clients.ts` | Client mapping, defaults, error remedies. |
 | `src/backend.ts` | Discovery, environment, process execution, limits. |
-| `src/normalize.ts`, `src/types.ts` | Upstream normalization and public data types. |
+| `src/normalize*.ts`, `src/types.ts` | Upstream normalization (entry point, windows, dates, shared readers) and public data types. |
 | `src/snapshot.ts` | Concurrent collection and provider statuses. |
 | `src/format.ts` | Text and JSON formatting. |
+| `scripts/` | Maintenance scripts, including the coverage floor check. |
 | `tests/` | Unit tests and executable fixtures. |
 | `docs/` | Current references; dated evidence in `docs/archive/`. |
 

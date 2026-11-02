@@ -35,9 +35,18 @@ On macOS and Linux:
   world-writable directories are still rejected.
 
 Discovery validates the resolved target's directory chain, not every alias
-directory used to reach it. These checks are not a sandbox, do not validate
-backend code or signatures, and do not prevent replacement between checking
-and execution. Install only a backend you trust.
+directory used to reach it. Immediately before every spawn, usagemux re-runs
+the full discovery validation on the executable: it resolves symlinks again
+and requires the same regular-file, ownership, permission, executable-bit,
+directory-chain, and working-tree rules. The spawn runs the re-resolved real
+path, not the path discovery returned, so an executable replaced by a
+symlink after discovery is refused instead of executed. Discovery, the
+rebuilt child `PATH`, and the child environment are resolved once per
+snapshot and shared by every provider call in it, so the re-check closes
+most of the window between discovery and a later spawn. These checks are
+not a sandbox, do not validate backend code or signatures, and do not
+prevent replacement between the re-check and the exec itself. Install only
+a backend you trust.
 
 The shell launcher uses separate [Bun lookup rules](INSTALLATION.md#launcher-troubleshooting).
 Its fixed locations are not the CodexBar search path.
@@ -46,7 +55,9 @@ Its fixed locations are not the CodexBar search path.
 
 The child receives a copy of the environment, with `PATH` rebuilt from
 absolute, resolvable, trusted directories using the same directory-chain
-checks. Resolved duplicate directories are removed, preserving order.
+checks. Resolved duplicate directories are removed, preserving order. The
+rebuilt environment is computed once per snapshot and shared by every
+provider call in that snapshot.
 
 The following variable names are removed case-insensitively:
 
@@ -72,11 +83,12 @@ retry loop, or overall command deadline.
 
 | Limit | Scope |
 | --- | --- |
-| Provider timer | [CLI timeout](CLI.md#selection-and-options); starts after environment preparation and process spawning, and races output collection plus process exit. |
+| Provider timer | [CLI timeout](CLI.md#selection-and-options); starts after process spawning, and races output collection plus process exit. Discovery and environment preparation happen once per snapshot, before the first provider call. |
 | stdout | 512 KiB (524,288 bytes) per provider call. |
 | stderr | A separate 512 KiB limit per provider call. |
 | Failure detail | Trimmed stderr is limited to the first 8,192 JavaScript string code units, followed by an ellipsis if truncated, when a nonzero exit has no non-null JSON payload. |
 | Timeout grace | 250 ms after SIGTERM, then SIGKILL and cleanup. |
+| Cleanup cap | After SIGKILL, cleanup waits at most 2 seconds for the original process and output readers, then cancels the output streams and releases the call with its error. |
 
 Structured JSON error messages are subject to the stdout byte limit, not the
 8,192-unit stderr detail limit. Malformed JSON takes precedence over failure
@@ -89,8 +101,11 @@ that grace period. Signaling falls back to the original process if group
 signaling fails.
 
 Descendants that leave the original process group are outside this mechanism.
-Cleanup waits for the original process and output readers; a descendant that
-escapes and retains a pipe can delay completion. Discovery, environment
-preparation, spawning, and cleanup are outside the provider timer's strict
-scope. The timeout is therefore not a hard command deadline or a guarantee
-that every descendant has terminated.
+Cleanup waits for the original process and output readers for at most
+2 seconds after SIGKILL. If the cap fires, the output streams are canceled,
+which closes the pipes and lets the call return while the escaped descendant
+is still running. The cap's timer is cleared once cleanup settles, so a call
+whose cleanup finishes early does not keep the process alive until the cap.
+Discovery, environment preparation, spawning, and cleanup are outside the
+provider timer's strict scope. The timeout is therefore not a hard command
+deadline or a guarantee that every descendant has terminated.

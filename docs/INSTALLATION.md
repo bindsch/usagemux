@@ -8,14 +8,17 @@ read_when:
 ## Obtain the source
 
 [GitHub releases](https://github.com/bindsch/usagemux/releases) provide source
-archives. Releases through v0.2.0 have no attached binary assets. Either unpack
-a source archive and enter its directory, or clone a tagged release:
+archives; releases ship no attached binary assets. Either unpack a source
+archive and enter its directory, or clone a tagged release:
 
 ```sh
 git clone https://github.com/bindsch/usagemux.git
 cd usagemux
-git checkout v0.2.0
+git checkout v1.0.0
 ```
+
+`v1.0.0` above is the current release; substitute the
+[latest tag](https://github.com/bindsch/usagemux/releases) on later updates.
 
 ## Install prerequisites
 
@@ -59,8 +62,8 @@ Account details and quota values are not reproduced here.
 
 This establishes one successful Kimi fetch on this build and installation,
 not a certified minimum backend version or compatibility for every provider.
-Its help lists `qwen-cloud`, while the released usagemux mapping uses
-`qwencloud`; alias compatibility was not established.
+Its help lists `qwen-cloud`; the usagemux mapping uses `qwencloud`, which the
+upstream provider registry lists as a valid provider ID.
 
 The [2026-10-10 report](archive/align-0.2-report.md) records live Kimi and
 Antigravity observations but did not capture a backend version or digest.
@@ -92,7 +95,8 @@ and restores `bin/usagemux` to mode 0755 after Bun changes its permissions.
 Use the Makefile target rather than bare `bun link`. Ensure Bun's global
 binary directory, normally `~/.bun/bin`, is on `PATH`.
 
-At v0.2.0, the version output is `usagemux 0.2.0`. The final command should
+The version output should match the checked-out tag, for example
+`usagemux 1.0.0` at v1.0.0. The final command should
 exit zero and report `aider: not-applicable` without consulting CodexBar.
 
 The link points into this checkout. Keep `bin/`, `src/`, `package.json`,
@@ -102,7 +106,7 @@ and `bunfig.runtime.toml` in place. This is not a standalone binary install.
 
 To update, fetch tags in the retained checkout, check out the chosen release,
 and rerun `make install`, `make check`, and `make link`. For example,
-`git fetch --tags` followed by `git checkout v0.2.0` selects that release.
+`git fetch --tags` followed by `git checkout v1.0.0` selects that release.
 Resolve local changes before changing versions.
 
 Run `make unlink` from the retained checkout to remove the global package

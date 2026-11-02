@@ -3,6 +3,7 @@ import { describe, expect, test } from "bun:test";
 import {
   CLIENT_PROVIDERS,
   DEFAULT_CLIENTS,
+  KIMI_AGED_OUT_MESSAGE,
   SUPPORTED_CLIENTS,
   getNotApplicableMessage,
   withErrorRemedy,
@@ -59,6 +60,12 @@ describe("client mapping", () => {
       "openhands is provider-agnostic; usage depends on its configured provider.",
     );
   });
+
+  test("gives pi its own pending-verification message", () => {
+    expect(getNotApplicableMessage("pi")).toBe(
+      "pi usage is not read yet: CodexBar's pi provider is unverified.",
+    );
+  });
 });
 
 describe("error remedies", () => {
@@ -71,7 +78,8 @@ describe("error remedies", () => {
     expect(message).toContain(
       "Add a Copilot account in CodexBar (menu > Add / switch account, GitHub device flow)",
     );
-    expect(message).toContain("COPILOT_API_TOKEN");
+    expect(message).toContain("a plain gh auth token cannot authenticate");
+    expect(message).not.toContain("COPILOT_API_TOKEN");
   });
 
   test("appends the cline remedy to the upstream no-strategy error", () => {
@@ -83,11 +91,19 @@ describe("error remedies", () => {
     expect(message).toContain("Settings > Providers > ClinePass");
   });
 
-  test("falls back to the generic account remedy for other providers", () => {
+  test("appends the gemini remedy naming the Gemini CLI credential route", () => {
     expect(
       withErrorRemedy("gemini", "No available fetch strategy for gemini."),
     ).toBe(
-      "No available fetch strategy for gemini. Add an account for this provider in CodexBar (menu > Add / switch account).",
+      "No available fetch strategy for gemini. Run gemini and complete its sign-in so the Gemini CLI credential exists (CodexBar's default Gemini source reads that credential), or add an account for this provider in CodexBar.",
+    );
+  });
+
+  test("falls back to the generic account remedy for other providers", () => {
+    expect(
+      withErrorRemedy("droid", "No available fetch strategy for factory."),
+    ).toBe(
+      "No available fetch strategy for factory. Add an account for this provider in CodexBar (menu > Add / switch account).",
     );
   });
 
@@ -112,8 +128,32 @@ describe("error remedies", () => {
     );
   });
 
-  test("the kimi credential remedy names kimi login", () => {
-    expect(withErrorRemedy("kimi", "No available fetch strategy for kimi.")).toContain("Run kimi login");
+  test("the kimi credential remedy says to run kimi and sign in when prompted", () => {
+    expect(withErrorRemedy("kimi", "No available fetch strategy for kimi.")).toContain(
+      "Run kimi and sign in when prompted",
+    );
+  });
+
+  test("no remedy names kimi login or COPILOT_API_TOKEN", () => {
+    const remedies = [
+      ...SUPPORTED_CLIENTS.flatMap((client) => [
+        withErrorRemedy(
+          client,
+          `No available fetch strategy for ${CLIENT_PROVIDERS[client] ?? client}.`,
+        ),
+        withErrorRemedy(client, "CodexBar timed out after 10000ms.", { timeoutMs: 10_000, ownTimeout: true }),
+        withErrorRemedy(
+          client,
+          "The credential is invalid or expired.",
+          { kimiAgedOut: true },
+        ),
+      ]),
+      KIMI_AGED_OUT_MESSAGE,
+    ];
+    for (const remedy of remedies) {
+      expect(remedy).not.toContain("kimi login");
+      expect(remedy).not.toContain("COPILOT_API_TOKEN");
+    }
   });
 
   test("a timeout CodexBar reports inside its own output gets no remedy", () => {

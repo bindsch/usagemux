@@ -1,0 +1,15 @@
+#!/bin/sh
+
+# Hold stdout open from a descendant that leaves the process group, so the
+# pipe readers cannot settle until the sleep exits. The parent reports the
+# descendant's pid so the test can terminate it.
+python3 -c 'import os, time
+pid = os.fork()
+if pid == 0:
+    os.setsid()
+    time.sleep(4)
+else:
+    with open(os.environ["USAGEMUX_TEST_PID_FILE"], "w") as handle:
+        handle.write(str(pid))
+' &
+wait

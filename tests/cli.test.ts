@@ -1,8 +1,9 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 import {
   mkdirSync,
   mkdtempSync,
   chmodSync,
+  readFileSync,
   rmSync,
   statSync,
   symlinkSync,
@@ -10,8 +11,9 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 
-import { main, parseCliArgs } from "../src/cli";
+import { main, parseCliArgs, readPackageVersion } from "../src/cli";
 import type { UsageBackend } from "../src/snapshot";
 
 function outputCapture() {
@@ -29,6 +31,7 @@ function outputCapture() {
 
 const backend: UsageBackend = {
   findExecutable: async () => "/trusted/codexbar",
+  buildEnvironment: async () => ({}),
   fetch: async (_executable, provider) => ({
     provider,
     plan: "plus",
@@ -90,6 +93,74 @@ describe("CLI arguments", () => {
     expect(() => parseCliArgs(["snapshot", "--timeout", "0"])).toThrow(
       "--timeout must be a number greater than 0",
     );
+  });
+
+  test("rejects a missing or unknown command", () => {
+    expect(() => parseCliArgs([])).toThrow("Missing command; expected snapshot.");
+    expect(() => parseCliArgs(["frobnicate"])).toThrow(
+      'Unknown command "frobnicate".',
+    );
+  });
+
+  test("accepts snapshot --help and snapshot -h as help", () => {
+    expect(parseCliArgs(["snapshot", "--help"])).toEqual({ kind: "help" });
+    expect(parseCliArgs(["snapshot", "-h"])).toEqual({ kind: "help" });
+  });
+
+  test("rejects a timeout above the cap", () => {
+    expect(() => parseCliArgs(["snapshot", "--timeout", "301"])).toThrow(
+      "--timeout cannot exceed 300 seconds.",
+    );
+    expect(() => parseCliArgs(["snapshot", "--timeout", "1e9"])).toThrow(
+      "--timeout cannot exceed 300 seconds.",
+    );
+  });
+
+  test("rejects unknown options", () => {
+    expect(() => parseCliArgs(["snapshot", "--wat"])).toThrow(
+      'Unknown option "--wat".',
+    );
+    expect(() => parseCliArgs(["snapshot", "codex"])).toThrow(
+      'Unknown option "codex".',
+    );
+  });
+
+  test("rejects a missing option value", () => {
+    expect(() => parseCliArgs(["snapshot", "--client"])).toThrow(
+      "--client requires a value.",
+    );
+    expect(() => parseCliArgs(["snapshot", "--client", "--format"])).toThrow(
+      "--client requires a value.",
+    );
+    expect(() => parseCliArgs(["snapshot", "--format="])).toThrow(
+      "--format requires a value.",
+    );
+    expect(() => parseCliArgs(["snapshot", "--timeout=--all"])).toThrow(
+      "--timeout requires a value.",
+    );
+  });
+
+  test("readPackageVersion reads the manifest and rejects a non-string version", () => {
+    expect(readPackageVersion()).toBe(
+      (JSON.parse(readFileSync(resolve(import.meta.dir, "..", "package.json"), "utf8")) as {
+        version: string;
+      }).version,
+    );
+
+    const directory = mkdtempSync(join(tmpdir(), "usagemux-version-"));
+    try {
+      const valid = join(directory, "package.json");
+      writeFileSync(valid, JSON.stringify({ version: "9.9.9" }));
+      expect(readPackageVersion(pathToFileURL(valid))).toBe("9.9.9");
+
+      const invalid = join(directory, "invalid.json");
+      writeFileSync(invalid, JSON.stringify({ version: 42 }));
+      expect(() => readPackageVersion(pathToFileURL(invalid))).toThrow(
+        "package.json is missing a string version.",
+      );
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
   });
 });
 
@@ -247,5 +318,98 @@ describe("CLI execution", () => {
     expect(exitCode).toBe(0);
     expect(discovered).toBe(false);
     expect(capture.stdout.join("")).toContain("usagemux snapshot");
+  });
+
+  test("prints the package version", async () => {
+    const capture = outputCapture();
+    const exitCode = await main(["--version"], { backend, io: capture.io });
+
+    expect(exitCode).toBe(0);
+    expect(capture.stderr).toEqual([]);
+    expect(capture.stdout.join("")).toBe(`usagemux ${readPackageVersion()}\n`);
+  });
+
+  test("returns 1 and reports unexpected internal errors", async () => {
+    const errored = outputCapture();
+    const exitCode = await main(["snapshot", "--client", "codex"], {
+      backend: {
+        ...backend,
+        findExecutable: async () => {
+          throw new Error("discovery exploded");
+        },
+      },
+      io: errored.io,
+    });
+
+    expect(exitCode).toBe(1);
+    expect(errored.stdout).toEqual([]);
+    expect(errored.stderr.join("")).toContain(
+      "Unexpected error: discovery exploded",
+    );
+
+    const nonError = outputCapture();
+    const thrown = await main(["snapshot", "--client", "codex"], {
+      backend: {
+        ...backend,
+        findExecutable: async () => {
+          throw "a string";
+        },
+      },
+      io: nonError.io,
+    });
+
+    expect(thrown).toBe(1);
+    expect(nonError.stderr.join("")).toContain("Unexpected error: a string");
+  });
+
+  test("without injected IO, output goes to the real streams", async () => {
+    const write = spyOn(process.stdout, "write").mockImplementation(() => true);
+    try {
+      expect(await main(["--version"])).toBe(0);
+      expect(write).toHaveBeenCalledWith(`usagemux ${readPackageVersion()}\n`);
+    } finally {
+      write.mockRestore();
+    }
+  });
+
+  test("launcher exits promptly once cleanup settles", async () => {
+    if (process.platform === "win32") return;
+    // Run from outside the checkout: the fixtures live inside it, and the
+    // caller working tree is a forbidden root for discovery.
+    const outside = mkdtempSync(join(tmpdir(), "usagemux-prompt-"));
+    const launcher = resolve(import.meta.dir, "..", "bin", "usagemux");
+    const cases = [
+      { fixture: "malformed", expects: "codex: error" },
+      { fixture: "valid", expects: "codex: ok" },
+    ];
+    try {
+      for (const { fixture, expects } of cases) {
+        const startedAt = Date.now();
+        const child = Bun.spawn(
+          [launcher, "snapshot", "--client", "codex"],
+          {
+            cwd: outside,
+            stdout: "pipe",
+            stderr: "pipe",
+            env: {
+              ...process.env,
+              PATH: resolve(import.meta.dir, "fixtures", fixture),
+            },
+          },
+        );
+        const [stdout, exitCode] = await Promise.all([
+          new Response(child.stdout).text(),
+          child.exited,
+        ]);
+        const elapsed = Date.now() - startedAt;
+        expect(exitCode).toBe(0);
+        expect(stdout).toContain(expects);
+        // A cleanup-cap timer that outlives cleanup held the process about
+        // two seconds after its output was printed.
+        expect(elapsed).toBeLessThan(1_000);
+      }
+    } finally {
+      rmSync(outside, { recursive: true, force: true });
+    }
   });
 });

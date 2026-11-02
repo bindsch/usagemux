@@ -32,13 +32,18 @@ Default selection uses the same order with `agy` omitted.
 | kimi | kimi |
 | opencode | opencode |
 | openhands | None; provider-agnostic |
-| pi | None; provider-agnostic |
+| pi | None; not mapped yet (see note) |
 | qwen | qwencloud |
 | zai | zai |
 
 Provider-agnostic clients return `not-applicable` because usage belongs to
 their configured provider. usagemux does not inspect their model routing.
 Select a mapped client for the provider you want to inspect.
+
+`pi` is different: CodexBar lists a `pi` provider, so the client is not
+provider-agnostic in principle. That provider's usage reporting is not yet
+verified, so this release keeps `pi` unmapped and returns `not-applicable`
+for it instead of mapping a provider whose output has not been confirmed.
 
 ## Credentials and remedies
 
@@ -47,9 +52,10 @@ The shipped credential advice is:
 
 | Client | Setup |
 | --- | --- |
-| kimi | Run `kimi login` to establish or renew the CLI credential at `~/.kimi-code/credentials/kimi-code.json` (or under `KIMI_CODE_HOME`), or export `KIMI_CODE_API_KEY` for the backend process. The CLI's access token lives 15 minutes and only the CLI refreshes it, so CodexBar can read Kimi usage only within about 15 minutes of a kimi run; at other times usagemux reports "usage unknown" with the reason instead of CodexBar's "invalid or expired" (see [error remedies](PROTOCOL.md)). CodexBar does not refresh CLI-owned credentials. See the [Kimi authentication reference](https://github.com/steipete/CodexBar/blob/main/docs/kimi.md). |
-| copilot | Add a Copilot account in CodexBar using its GitHub device flow, or export `COPILOT_API_TOKEN`. The shipped remedy identifies a plain `gh auth token` as unsuitable for the Copilot usage API. |
+| kimi | Run `kimi` and sign in when prompted to establish or renew the CLI credential at `~/.kimi-code/credentials/kimi-code.json` (or under `KIMI_CODE_HOME`), or export `KIMI_CODE_API_KEY` for the backend process. On the CLI-credential route, the access token lives 15 minutes and only the CLI refreshes it, so CodexBar reads Kimi usage only within about 15 minutes of a kimi run. When it reports "invalid or expired" while the credential holds a refresh token, usagemux replaces the message with that reason (see [error remedies](PROTOCOL.md)); an exported `KIMI_CODE_API_KEY` avoids the limit. CodexBar does not refresh CLI-owned credentials. See the [Kimi authentication reference](https://github.com/steipete/CodexBar/blob/main/docs/kimi.md). |
+| copilot | Add a Copilot account in CodexBar using its GitHub device flow. The shipped remedy identifies a plain `gh auth token` as unsuitable for the Copilot usage API. |
 | cline | Install the Cline CLI and run `cline auth`, or add a ClinePass API key in CodexBar under Settings > Providers > ClinePass. |
+| gemini | Run `gemini` and complete its sign-in so the Gemini CLI credential exists; CodexBar's default Gemini source reads that credential. Adding an account for the provider in CodexBar is the alternative. |
 | Other mapped clients | Add the provider account in CodexBar and follow its authentication diagnostic and provider guide. |
 
 Credential advice is appended only under the

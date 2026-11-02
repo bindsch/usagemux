@@ -19,5 +19,10 @@ coverage:
 typecheck:
 	bun run typecheck
 
-check: typecheck test
+check: typecheck
+	mkdir -p coverage
+	rm -f coverage/lcov.info coverage/.run-stamp coverage/.lcov.info.*.tmp
+	touch coverage/.run-stamp
+	bun test --coverage --coverage-reporter=lcov --coverage-dir="$(CURDIR)/coverage"
+	bun scripts/check-source-coverage.ts
 	sh -n bin/usagemux

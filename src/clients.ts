@@ -55,6 +55,9 @@ export function isSupportedClient(value: string): value is Client {
 }
 
 export function getNotApplicableMessage(client: Client): string {
+  if (client === "pi") {
+    return "pi usage is not read yet: CodexBar's pi provider is unverified.";
+  }
   return `${client} is provider-agnostic; usage depends on its configured provider.`;
 }
 
@@ -69,10 +72,12 @@ const TIMEOUT_PREFIX = "CodexBar timed out after";
 const NO_STRATEGY_REMEDIES: Readonly<Partial<Record<Client, string>>> = {
   cline:
     "Install the Cline CLI and run cline auth, or add a ClinePass API key in CodexBar under Settings > Providers > ClinePass.",
+  gemini:
+    "Run gemini and complete its sign-in so the Gemini CLI credential exists (CodexBar's default Gemini source reads that credential), or add an account for this provider in CodexBar.",
   kimi:
-    "Run kimi login (CodexBar reads the Kimi Code CLI's own credential and does not refresh it), or export KIMI_CODE_API_KEY for the codexbar process.",
+    "Run kimi and sign in when prompted (CodexBar reads the Kimi Code CLI's own credential and does not refresh it), or export KIMI_CODE_API_KEY for the codexbar process.",
   copilot:
-    "Add a Copilot account in CodexBar (menu > Add / switch account, GitHub device flow) or export COPILOT_API_TOKEN for the codexbar process; a plain gh auth token cannot authenticate to the Copilot usage API.",
+    "Add a Copilot account in CodexBar (menu > Add / switch account, GitHub device flow); a plain gh auth token cannot authenticate to the Copilot usage API.",
 };
 
 const GENERIC_NO_STRATEGY_REMEDY =
@@ -116,7 +121,7 @@ const KIMI_STALE_MARKER = "credential is invalid or expired";
 export const KIMI_AGED_OUT_MESSAGE =
   "Kimi usage unknown: the Kimi Code CLI's access token lives 15 minutes and has aged out, and CodexBar "
   + "never refreshes it. kimi refreshes it on its next run, so this is not by itself a sign-in problem. "
-  + "If kimi itself also fails, run kimi login.";
+  + "If kimi itself also fails, run kimi and sign in when prompted.";
 
 export function withErrorRemedy(client: Client, message: string, options: RemedyOptions = {}): string {
   if (client === "kimi" && message.includes(KIMI_STALE_MARKER) && (options.kimiAgedOut ?? kimiTokenAgedOut())) {

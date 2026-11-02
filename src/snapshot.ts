@@ -60,6 +60,10 @@ export async function createSnapshot(
     };
   }
 
+  // The executable and the rebuilt child PATH are resolved once per
+  // snapshot; every provider call reuses them.
+  const environment = await dependencies.backend.buildEnvironment();
+
   const results = await Promise.all(
     options.clients.map((client) =>
       collectClientResult(
@@ -67,6 +71,7 @@ export async function createSnapshot(
         executable,
         options.timeoutMs,
         dependencies.backend,
+        environment,
       ),
     ),
   );
@@ -89,6 +94,7 @@ async function collectClientResult(
   executable: string,
   timeoutMs: number,
   backend: UsageBackend,
+  environment: Record<string, string>,
 ): Promise<UsageResult> {
   const provider = CLIENT_PROVIDERS[client];
   if (provider === null) {
@@ -96,7 +102,7 @@ async function collectClientResult(
   }
 
   try {
-    const payload = await backend.fetch(executable, provider, timeoutMs);
+    const payload = await backend.fetch(executable, provider, timeoutMs, environment);
     const result = normalizeCodexBarPayload(payload, { client, provider });
     if (result.status === "error" && result.message !== null) {
       // CodexBar exits non-zero but still emits structured JSON for provider

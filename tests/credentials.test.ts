@@ -58,6 +58,7 @@ describe("Kimi CLI token that aged out", () => {
 
   test("the replacement does not claim the sign-in is valid and names the real fallback", () => {
     expect(KIMI_AGED_OUT_MESSAGE).not.toContain("login is fine");
-    expect(KIMI_AGED_OUT_MESSAGE).toContain("kimi login");
+    expect(KIMI_AGED_OUT_MESSAGE).not.toContain("kimi login");
+    expect(KIMI_AGED_OUT_MESSAGE).toContain("run kimi and sign in when prompted");
   });
 });
