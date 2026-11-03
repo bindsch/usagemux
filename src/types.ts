@@ -13,6 +13,9 @@ export interface UsageWindow {
   remainingPercent: number | null;
   windowMinutes: number | null;
   resetsAt: string | null;
+  /** True when upstream marked the window `isSyntheticPlaceholder`: the
+   * window exists but its level is unknown, so both percentages are null. */
+  placeholder: boolean;
 }
 
 export interface UsageCredits {

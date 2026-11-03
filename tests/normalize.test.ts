@@ -56,6 +56,7 @@ describe("CodexBar normalization", () => {
           remainingPercent: 63,
           windowMinutes: 300,
           resetsAt: "2026-08-03T12:00:00.000Z",
+          placeholder: false,
         },
         {
           kind: "secondary",
@@ -63,6 +64,7 @@ describe("CodexBar normalization", () => {
           remainingPercent: 27.5,
           windowMinutes: 10_080,
           resetsAt: null,
+          placeholder: false,
         },
         {
           kind: "tertiary",
@@ -70,6 +72,7 @@ describe("CodexBar normalization", () => {
           remainingPercent: 100,
           windowMinutes: 43_200,
           resetsAt: "2026-09-01T00:00:00.000Z",
+          placeholder: false,
         },
         {
           kind: "monthly",
@@ -77,6 +80,7 @@ describe("CodexBar normalization", () => {
           remainingPercent: 90,
           windowMinutes: 43_200,
           resetsAt: "2026-09-02T00:00:00.000Z",
+          placeholder: false,
         },
       ],
       credits: { remaining: 17.5, unit: "USD" },
@@ -218,7 +222,7 @@ describe("CodexBar normalization", () => {
     });
   });
 
-  test("omits Claude synthetic placeholder session windows", () => {
+  test("keeps a Claude synthetic placeholder window with null percents", () => {
     const result = normalizeCodexBarPayload({
       provider: "claude",
       source: "web",
@@ -237,11 +241,22 @@ describe("CodexBar normalization", () => {
       },
     }, { client: "claude", provider: "claude" });
 
-    expect(result.windows).toEqual([expect.objectContaining({
-      kind: "secondary",
-      usedPercent: 42,
-      remainingPercent: 58,
-    })]);
+    expect(result.windows).toEqual([
+      {
+        kind: "primary",
+        usedPercent: null,
+        remainingPercent: null,
+        windowMinutes: 300,
+        resetsAt: null,
+        placeholder: true,
+      },
+      expect.objectContaining({
+        kind: "secondary",
+        usedPercent: 42,
+        remainingPercent: 58,
+        placeholder: false,
+      }),
+    ]);
   });
 
   test("selects the requested provider from an array payload", () => {
@@ -391,7 +406,7 @@ describe("CodexBar contract edges", () => {
   const normalize = (input: unknown) =>
     normalizeCodexBarPayload(input, { client: "codex", provider: "codex" });
 
-  test("array windows fall back to positional kinds and skip placeholders", () => {
+  test("array windows fall back to positional kinds and keep placeholders", () => {
     const result = normalize({
       provider: "codex",
       usage: {
@@ -403,13 +418,25 @@ describe("CodexBar contract edges", () => {
       },
     });
 
-    expect(result.windows.map(({ kind }) => kind)).toEqual([
-      "windows-1",
-      "windows-2",
+    expect(result.windows).toEqual([
+      expect.objectContaining({
+        kind: "windows-1",
+        usedPercent: 10,
+        placeholder: false,
+      }),
+      expect.objectContaining({ kind: "windows-2", placeholder: false }),
+      {
+        kind: "windows-3",
+        usedPercent: null,
+        remainingPercent: null,
+        windowMinutes: null,
+        resetsAt: null,
+        placeholder: true,
+      },
     ]);
   });
 
-  test("extra windows fall back to title, then position, and skip placeholders", () => {
+  test("extra windows fall back to title, then position, and keep placeholders", () => {
     const result = normalize({
       provider: "codex",
       usage: {
@@ -421,10 +448,16 @@ describe("CodexBar contract edges", () => {
       },
     });
 
-    expect(result.windows.map(({ kind }) => kind)).toEqual([
-      "Weekly cap",
-      "extra-3",
-    ]);
+    expect(result.windows.map(({ kind, placeholder }) => ({ kind, placeholder })))
+      .toEqual([
+        { kind: "Weekly cap", placeholder: false },
+        { kind: "extra-2", placeholder: true },
+        { kind: "extra-3", placeholder: false },
+      ]);
+    expect(result.windows[1]).toMatchObject({
+      usedPercent: null,
+      remainingPercent: null,
+    });
   });
 
   test("extra windows treat an empty id or title as absent", () => {
@@ -457,6 +490,7 @@ describe("CodexBar contract edges", () => {
         remainingPercent: 70,
         windowMinutes: null,
         resetsAt: null,
+        placeholder: false,
       },
     ]);
   });

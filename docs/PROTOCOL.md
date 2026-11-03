@@ -30,7 +30,8 @@ produce no JSON. Exit zero does not imply successful provider measurements.
           "usedPercent": 39,
           "remainingPercent": 61,
           "windowMinutes": 10080,
-          "resetsAt": "2026-08-07T09:00:00.000Z"
+          "resetsAt": "2026-08-07T09:00:00.000Z",
+          "placeholder": false
         }
       ],
       "credits": null,
@@ -66,6 +67,7 @@ are ISO 8601 UTC strings. Missing optional upstream values generally become null
 | `windows[].remainingPercent` | number or null | Remaining percentage clamped to 0–100 and rounded to two decimals; null when unknown. |
 | `windows[].windowMinutes` | number or null | Non-negative finite duration from upstream; a negative or non-finite upstream value is emitted as null, as is an absent one. No integer constraint. |
 | `windows[].resetsAt` | timestamp string or null | Quota reset time, independent of subscription dates. |
+| `windows[].placeholder` | boolean | True when upstream marked the window `isSyntheticPlaceholder`: the window exists but its level is unknown, so both percentages are null. False for measured windows. |
 | `credits.remaining` | number | Finite balance; not clamped, and may be negative or fractional. |
 | `credits.unit` | string | Upstream unit, or `"credits"` when omitted, null, or empty. |
 
@@ -112,7 +114,11 @@ Collection order is:
    first within `usage`, then at the top level. Each retains its array order.
 3. `usage.extraRateWindows` in array order.
 
-A window with `isSyntheticPlaceholder: true` is omitted. No deduplication
+A window with `isSyntheticPlaceholder: true` is kept as a placeholder rather
+than omitted: `placeholder` is true and both percentages are null even when
+numbers are present, while its kind follows the normal fallback labels. A
+consumer can therefore tell a window that exists at an unknown level from a
+window the backend did not report. No deduplication
 occurs. A window's own `kind` takes precedence; otherwise named windows use
 their name, array windows use `<array-name>-<one-based-index>`, and extra
 windows use `id`, then `title`, then `extra-<one-based-index>`. An empty

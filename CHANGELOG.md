@@ -9,6 +9,29 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 Nothing yet.
 
+## [1.0.1] - 2026-11-03
+
+### Fixed
+
+- A window that upstream marks `isSyntheticPlaceholder` is no longer dropped
+  from the snapshot. It is kept with `placeholder: true`, both percentages
+  null, and its normal kind and reset time, so a consumer can tell a window
+  that exists at an unknown level (a codex 5-hour window CodexBar synthesized
+  without a measurement) from a window the backend did not report. Text
+  output renders it as `primary: unknown remaining` followed by the reset
+  time when upstream reports one.
+- On exit 69, each `unavailable` client's message is now also written to
+  stderr, one line per client, so a caller that keeps only stderr sees why
+  the snapshot is unavailable. Stdout is unchanged, and provider-agnostic
+  clients still report only on stdout.
+
+### Changed
+
+- CI runs on ubuntu and macOS, pins `actions/checkout` and
+  `oven-sh/setup-bun` by commit SHA, derives the Bun version from
+  package.json's `packageManager` field instead of hardcoding it, and adds a
+  15-minute job timeout plus concurrency cancellation.
+
 ## [1.0.0] - 2026-10-31
 
 ### Added
@@ -204,7 +227,8 @@ Nothing yet.
 - Normalization of quota windows, credits, and subscription renewal/expiry
   across providers.
 
-[Unreleased]: https://github.com/bindsch/usagemux/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/bindsch/usagemux/compare/v1.0.1...HEAD
+[1.0.1]: https://github.com/bindsch/usagemux/releases/tag/v1.0.1
 [1.0.0]: https://github.com/bindsch/usagemux/releases/tag/v1.0.0
 [0.2.1]: https://github.com/bindsch/usagemux/releases/tag/v0.2.1
 [0.2.0]: https://github.com/bindsch/usagemux/releases/tag/v0.2.0

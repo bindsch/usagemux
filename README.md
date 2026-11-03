@@ -16,14 +16,14 @@ After installing Bun and the CodexBar CLI:
 ```sh
 git clone https://github.com/bindsch/usagemux.git
 cd usagemux
-git checkout v1.0.0
+git checkout v1.0.1
 make install
 make link
 usagemux --version
 usagemux snapshot --client aider
 ```
 
-`v1.0.0` is the current release; use the
+`v1.0.1` is the current release; use the
 [latest tag](https://github.com/bindsch/usagemux/releases) on later updates.
 
 Keep this checkout: the linked launcher reads its source files at runtime.

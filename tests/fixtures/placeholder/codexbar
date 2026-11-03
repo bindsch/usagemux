@@ -1,0 +1,3 @@
+#!/bin/sh
+
+echo '{"provider":"codex","usage":{"primary":{"usedPercent":10,"windowMinutes":300,"resetsAt":null,"isSyntheticPlaceholder":true},"secondary":{"usedPercent":42,"windowMinutes":10080}}}'

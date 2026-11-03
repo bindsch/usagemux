@@ -14,10 +14,10 @@ archive and enter its directory, or clone a tagged release:
 ```sh
 git clone https://github.com/bindsch/usagemux.git
 cd usagemux
-git checkout v1.0.0
+git checkout v1.0.1
 ```
 
-`v1.0.0` above is the current release; substitute the
+`v1.0.1` above is the current release; substitute the
 [latest tag](https://github.com/bindsch/usagemux/releases) on later updates.
 
 ## Install prerequisites
@@ -96,7 +96,7 @@ Use the Makefile target rather than bare `bun link`. Ensure Bun's global
 binary directory, normally `~/.bun/bin`, is on `PATH`.
 
 The version output should match the checked-out tag, for example
-`usagemux 1.0.0` at v1.0.0. The final command should
+`usagemux 1.0.1` at v1.0.1. The final command should
 exit zero and report `aider: not-applicable` without consulting CodexBar.
 
 The link points into this checkout. Keep `bin/`, `src/`, `package.json`,
@@ -106,7 +106,7 @@ and `bunfig.runtime.toml` in place. This is not a standalone binary install.
 
 To update, fetch tags in the retained checkout, check out the chosen release,
 and rerun `make install`, `make check`, and `make link`. For example,
-`git fetch --tags` followed by `git checkout v1.0.0` selects that release.
+`git fetch --tags` followed by `git checkout v1.0.1` selects that release.
 Resolve local changes before changing versions.
 
 Run `make unlink` from the retained checkout to remove the global package

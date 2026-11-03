@@ -63,6 +63,17 @@ Credential advice is appended only under the
 Missing credentials for one installation do not mean that provider is
 unsupported everywhere. Unknown errors are not rewritten into login advice.
 
+## Placeholder windows
+
+CodexBar marks some windows `isSyntheticPlaceholder` when it synthesizes a
+window without a measurement, such as a 5-hour session window it infers from
+a plan. usagemux keeps such a window instead of dropping it: it carries
+`placeholder: true` with null percentages and its normal kind. A consumer can
+therefore tell a window that exists at an unknown level from a window the
+backend did not report. Text output renders it as
+`primary: unknown remaining; reset unknown`. See
+[window semantics](PROTOCOL.md#normalization).
+
 ## Antigravity
 
 The 2026-10-10 run observed a local language-server probe followed by an

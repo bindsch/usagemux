@@ -14,7 +14,7 @@ import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { main, parseCliArgs, readPackageVersion } from "../src/cli";
-import type { UsageBackend } from "../src/snapshot";
+import { BackendUnavailableError, type UsageBackend } from "../src/snapshot";
 
 function outputCapture() {
   const stdout: string[] = [];
@@ -287,6 +287,45 @@ describe("CLI execution", () => {
 
     expect(exitCode).toBe(69);
     expect(capture.stdout.join("")).toContain("codex: unavailable");
+    expect(capture.stderr).toEqual([
+      "codex: unavailable: CodexBar was not found on PATH.\n",
+    ]);
+  });
+
+  test("exit 69 repeats each unavailable reason on stderr, one line per client", async () => {
+    const capture = outputCapture();
+    const exitCode = await main(
+      ["snapshot", "--client", "codex", "--client", "claude", "--client", "aider", "--format", "json"],
+      {
+        backend: {
+          findExecutable: async () => "/trusted/codexbar",
+          buildEnvironment: async () => ({}),
+          fetch: async (_executable, provider) => {
+            throw new BackendUnavailableError(
+              `CodexBar could not be started for ${provider}.`,
+            );
+          },
+        },
+        io: capture.io,
+      },
+    );
+
+    expect(exitCode).toBe(69);
+    // Only the unavailable clients explain themselves on stderr; the
+    // provider-agnostic client keeps its message on stdout alone.
+    expect(capture.stderr).toEqual([
+      "codex: unavailable: CodexBar could not be started for codex.\n",
+      "claude: unavailable: CodexBar could not be started for claude.\n",
+    ]);
+    const snapshot = JSON.parse(capture.stdout.join("")) as {
+      results: { client: string; status: string }[];
+    };
+    expect(snapshot.results.map(({ client, status }) => ({ client, status })))
+      .toEqual([
+        { client: "codex", status: "unavailable" },
+        { client: "claude", status: "unavailable" },
+        { client: "aider", status: "not-applicable" },
+      ]);
   });
 
   test("returns 64 for usage errors", async () => {
@@ -408,6 +447,56 @@ describe("CLI execution", () => {
         // two seconds after its output was printed.
         expect(elapsed).toBeLessThan(1_000);
       }
+    } finally {
+      rmSync(outside, { recursive: true, force: true });
+    }
+  });
+
+  test("a placeholder primary window is kept with null percents", async () => {
+    if (process.platform === "win32") return;
+    // Run from outside the checkout, like the launcher test above: the
+    // fixture lives inside it, and the caller working tree is a forbidden
+    // root for discovery.
+    const outside = mkdtempSync(join(tmpdir(), "usagemux-placeholder-"));
+    const launcher = resolve(import.meta.dir, "..", "bin", "usagemux");
+    const fixturePath = resolve(import.meta.dir, "fixtures", "placeholder");
+    const run = async (format: string[]) => {
+      const child = Bun.spawn(
+        [launcher, "snapshot", "--client", "codex", ...format],
+        {
+          cwd: outside,
+          stdout: "pipe",
+          stderr: "pipe",
+          env: { ...process.env, PATH: fixturePath },
+        },
+      );
+      const [stdout, exitCode] = await Promise.all([
+        new Response(child.stdout).text(),
+        child.exited,
+      ]);
+      return { stdout, exitCode };
+    };
+
+    try {
+      const json = await run(["--format", "json"]);
+      expect(json.exitCode).toBe(0);
+      const snapshot = JSON.parse(json.stdout) as {
+        results: { windows: unknown[] }[];
+      };
+      expect(snapshot.results[0]!.windows[0]).toEqual({
+        kind: "primary",
+        usedPercent: null,
+        remainingPercent: null,
+        windowMinutes: 300,
+        resetsAt: null,
+        placeholder: true,
+      });
+
+      const text = await run([]);
+      expect(text.exitCode).toBe(0);
+      expect(text.stdout).toContain("codex: ok");
+      expect(text.stdout).toContain("primary: unknown remaining; reset unknown");
+      expect(text.stdout).toContain("secondary: 58% remaining");
     } finally {
       rmSync(outside, { recursive: true, force: true });
     }

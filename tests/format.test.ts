@@ -68,6 +68,7 @@ describe("formatSnapshotText", () => {
               remainingPercent: 90,
               windowMinutes: null,
               resetsAt: null,
+              placeholder: false,
             },
           ],
           credits: { remaining: 5, unit: `${ESC}[0mcredits` },
@@ -89,6 +90,7 @@ describe("formatSnapshotText", () => {
       remainingPercent,
       windowMinutes: null,
       resetsAt: null,
+      placeholder: false,
     });
     const text = formatSnapshotText(
       snapshot([
@@ -109,5 +111,30 @@ describe("formatSnapshotText", () => {
     expect(text).toContain("monthly: 95.5% remaining");
     expect(text).toContain("daily: 66% remaining");
     expect(text).toContain("credits: 17.46 USD remaining");
+  });
+
+  test("renders unknown remaining and both subscription dates", () => {
+    const text = formatSnapshotText(
+      snapshot([
+        result({
+          windows: [
+            {
+              kind: "primary",
+              usedPercent: null,
+              remainingPercent: null,
+              windowMinutes: 300,
+              resetsAt: null,
+              placeholder: true,
+            },
+          ],
+          subscriptionRenewsAt: "2026-09-03T10:00:00.000Z",
+          subscriptionExpiresAt: "2027-08-03T10:00:00.000Z",
+        }),
+      ]),
+    );
+
+    expect(text).toContain("primary: unknown remaining; reset unknown");
+    expect(text).toContain("subscription renews: 2026-09-03T10:00:00.000Z");
+    expect(text).toContain("subscription expires: 2027-08-03T10:00:00.000Z");
   });
 });

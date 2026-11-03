@@ -1,4 +1,4 @@
-import { describe, expect, mock, test } from "bun:test";
+import { describe, expect, mock, spyOn, test } from "bun:test";
 import * as fsPromises from "node:fs/promises";
 import {
   chmodSync,
@@ -13,6 +13,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
 import {
+  BackendUnavailableError,
   CodexBarBackend,
   buildBackendEnvironment,
   findCodexBarExecutable,
@@ -222,6 +223,31 @@ describe("CodexBar backend", () => {
         process.env.USAGEMUX_TEST_PID_FILE = originalPidFile;
       }
       rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  test("reports a backend that cannot be started", async () => {
+    if (process.platform === "win32") return;
+    // The trust re-check refuses a non-executable before the spawn, so the
+    // catch around Bun.spawn is reachable only when the mode flips in the
+    // instant between the re-check's access() and the spawn. Simulate that
+    // race deterministically by making the spawn itself throw the EACCES a
+    // non-executable path would raise.
+    const spawn = spyOn(Bun, "spawn").mockImplementation(() => {
+      throw new Error("EACCES: permission denied, access 'codexbar'");
+    });
+    const executable = resolve(FIXTURES, "valid", "codexbar");
+
+    try {
+      const failure = outsideCheckout(() =>
+        runCodexBar(executable, "codex", 1_000),
+      );
+      await expect(failure).rejects.toBeInstanceOf(BackendUnavailableError);
+      await expect(failure).rejects.toThrow(
+        "CodexBar could not be started: EACCES: permission denied, access 'codexbar'",
+      );
+    } finally {
+      spawn.mockRestore();
     }
   });
 

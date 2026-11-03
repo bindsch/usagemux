@@ -72,6 +72,11 @@ then credits and subscription renewal/expiry dates when present.
 
 Numbers are rounded to at most two decimal places; trailing zeros are omitted.
 Unknown window values appear as `unknown remaining` and `reset unknown`.
+A placeholder window (upstream `isSyntheticPlaceholder`) is kept with both
+percentages null, so it prints `unknown remaining`; its window length and
+reset time pass through when upstream reports them. The JSON `placeholder`
+field distinguishes it from a window with unknown measurements. See the
+[provider guide](PROVIDERS.md#placeholder-windows).
 An `ok` result with no windows, credits, or subscription dates shows
 `No usage windows reported.`
 
@@ -87,7 +92,7 @@ sequences. See the protocol for JSON escaping.
 | 0 | Help/version succeeded, or snapshot collection completed and the condition for 69 below did not apply. Every applicable provider can return `error` and still yield zero. A selection of only provider-agnostic clients also yields zero. |
 | 1 | An unexpected internal error was caught by the CLI; it writes a plain-text diagnostic to stderr. |
 | 64 | Invalid command-line usage; stdout is empty and stderr is plain text, even when `--format json` was requested. |
-| 69 | A completed snapshot has at least one applicable client and all applicable clients are `unavailable`. The requested output is still emitted. The launcher also uses 69 when no trusted Bun is found; that failure has plain-text stderr and no JSON envelope. |
+| 69 | A completed snapshot has at least one applicable client and all applicable clients are `unavailable`. The requested output is still emitted, and each `unavailable` client's message is also written to stderr, one line per client, so a caller that keeps only stderr sees the reason. The launcher also uses 69 when no trusted Bun is found; that failure has plain-text stderr and no JSON envelope. |
 
 Launcher or runtime failures before the CLI starts can have other exit codes
 and no envelope. The JSON guarantee applies only to completed snapshot

@@ -32,11 +32,14 @@ export function collectWindows(
     if (located?.value) {
       const windowPath = `${located.path}.${key}`;
       if (isSyntheticPlaceholder(located.value[key], windowPath)) {
-        continue;
+        windows.push(
+          placeholderWindow(located.value[key], key, windowPath),
+        );
+      } else {
+        windows.push(
+          normalizeWindow(located.value[key], key, windowPath),
+        );
       }
-      windows.push(
-        normalizeWindow(located.value[key], key, windowPath),
-      );
     }
   }
 
@@ -55,13 +58,13 @@ export function collectWindows(
       for (const [index, rawWindow] of candidate.entries()) {
         const windowPath = `${path}.${key}[${index}]`;
         const windowRecord = requireObject(rawWindow, windowPath);
+        const kind = readNonEmptyString(windowRecord, "kind", `${windowPath}.kind`) ??
+          `${key}-${index + 1}`;
         if (isSyntheticPlaceholder(windowRecord, windowPath)) {
+          windows.push(placeholderWindow(windowRecord, kind, windowPath));
           continue;
         }
-        const kind = readNonEmptyString(windowRecord, "kind", `${windowPath}.kind`);
-        windows.push(
-          normalizeWindow(rawWindow, kind ?? `${key}-${index + 1}`, windowPath),
-        );
+        windows.push(normalizeWindow(rawWindow, kind, windowPath));
       }
     }
   }
@@ -83,12 +86,16 @@ export function collectWindows(
         "usageKnown",
         `${path}.usageKnown`,
       );
+      const windowKind = firstNonEmpty(id, title) ?? `extra-${index + 1}`;
       if (isSyntheticPlaceholder(namedWindow.window, `${path}.window`)) {
+        windows.push(
+          placeholderWindow(namedWindow.window, windowKind, `${path}.window`),
+        );
         continue;
       }
       windows.push(normalizeWindow(
         namedWindow.window,
-        firstNonEmpty(id, title) ?? `extra-${index + 1}`,
+        windowKind,
         `${path}.window`,
         usageKnown === false,
       ));
@@ -133,6 +140,22 @@ function normalizeWindow(
     remainingPercent: remaining,
     windowMinutes: readWindowMinutes(record, `${path}.windowMinutes`),
     resetsAt: normalizeDate(resetValue, `${path}.resetsAt`),
+    placeholder: false,
+  };
+}
+
+/** A placeholder window is kept, not dropped: its presence says the window
+ * exists while its level is unknown, which a consumer cannot learn from an
+ * omitted window. Its kind follows the normal fallback labels and both
+ * percentages are null even when numbers are present. */
+function placeholderWindow(
+  value: unknown,
+  fallbackKind: string,
+  path: string,
+): UsageWindow {
+  return {
+    ...normalizeWindow(value, fallbackKind, path, true),
+    placeholder: true,
   };
 }
 

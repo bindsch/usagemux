@@ -8,7 +8,7 @@ import {
   isSupportedClient,
   type Client,
 } from "./clients";
-import { formatSnapshotJson, formatSnapshotText } from "./format";
+import { formatSnapshotJson, formatSnapshotText, escapeForTerminal } from "./format";
 import { createSnapshot, determineExitCode } from "./snapshot";
 
 const DEFAULT_TIMEOUT_SECONDS = 10;
@@ -174,7 +174,20 @@ export async function main(
         ? formatSnapshotJson(snapshot)
         : formatSnapshotText(snapshot),
     );
-    return determineExitCode(snapshot);
+    const exitCode = determineExitCode(snapshot);
+    if (exitCode === 69) {
+      // A caller that keeps only stderr must still see why the snapshot is
+      // unavailable, so each unavailable client's message is repeated there,
+      // one line per client, in addition to the output on stdout.
+      for (const result of snapshot.results) {
+        if (result.status === "unavailable" && result.message !== null) {
+          io.stderr(
+            `${result.client}: unavailable: ${escapeForTerminal(result.message)}\n`,
+          );
+        }
+      }
+    }
+    return exitCode;
   } catch (error) {
     if (error instanceof CliUsageError) {
       io.stderr(`${error.message}\nRun "usagemux --help" for usage.\n`);
