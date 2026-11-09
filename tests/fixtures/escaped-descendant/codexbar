@@ -1,15 +1,23 @@
 #!/bin/sh
 
 # Hold stdout open from a descendant that leaves the process group, so the
-# pipe readers cannot settle until the sleep exits. The parent reports the
-# descendant's pid so the test can terminate it.
+# pipe readers cannot settle until the sleep exits. The descendant writes
+# its pid only after setsid(), so the pid file exists only once the escape
+# is complete; the parent exits only after that write, so the test can
+# terminate the descendant.
 python3 -c 'import os, time
+read_end, write_end = os.pipe()
 pid = os.fork()
 if pid == 0:
+    os.close(read_end)
     os.setsid()
-    time.sleep(4)
-else:
     with open(os.environ["USAGEMUX_TEST_PID_FILE"], "w") as handle:
-        handle.write(str(pid))
+        handle.write(str(os.getpid()))
+    os.write(write_end, b"x")
+    os.close(write_end)
+    time.sleep(10)
+else:
+    os.close(write_end)
+    os.read(read_end, 1)
 ' &
 wait

@@ -4,13 +4,15 @@ import {
   chmodSync,
   mkdirSync,
   mkdtempSync,
+  realpathSync,
   rmSync,
+  statSync,
   symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { realpath } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { homedir, tmpdir } from "node:os";
+import { dirname, join, resolve } from "node:path";
 
 import {
   BackendUnavailableError,
@@ -42,6 +44,48 @@ mock.module("node:fs/promises", () => ({
     );
   }) as typeof fsPromises.realpath,
 }));
+
+// Discovery rejects an executable whose directory chain has a world-writable
+// member, with or without the sticky bit (docs/BACKEND.md). os.tmpdir() is
+// /tmp on Linux runners, mode 1777, so every fixture created there is
+// refused by the directory-chain rule before the rule a test targets is
+// reached: positive tests fail, and negative tests pass for the wrong
+// reason. Tests that need a trusted location therefore use tmpdir() only
+// when its chain is trusted (the per-user /var/folders/.../T on macOS) and
+// fall back to the home directory otherwise.
+function isTrustedChain(start: string): boolean {
+  let current = realpathSync(start);
+  while (true) {
+    const metadata = statSync(current);
+    if ((metadata.mode & 0o002) !== 0) return false;
+    if (
+      typeof process.getuid === "function" &&
+      metadata.uid !== process.getuid() &&
+      metadata.uid !== 0
+    ) {
+      return false;
+    }
+    const parent = dirname(current);
+    if (parent === current) return true;
+    current = parent;
+  }
+}
+
+function trustedTempBase(): string {
+  if (process.platform === "win32" || isTrustedChain(tmpdir())) {
+    return tmpdir();
+  }
+  if (isTrustedChain(homedir())) {
+    return homedir();
+  }
+  throw new Error("No trusted directory for backend test fixtures.");
+}
+
+const TRUSTED_TMP = trustedTempBase();
+
+function trustedTempDir(prefix: string): string {
+  return mkdtempSync(join(TRUSTED_TMP, prefix));
+}
 
 // The per-spawn trust re-check applies discovery's working-tree exclusion,
 // and the fixtures live inside this checkout, so a fetch against a fixture
@@ -76,7 +120,7 @@ describe("CodexBar backend", () => {
 
   test("rejects a group- or world-writable CodexBar executable", async () => {
     if (process.platform === "win32") return;
-    const directory = mkdtempSync(join(tmpdir(), "usagemux-untrusted-"));
+    const directory = trustedTempDir("usagemux-untrusted-");
     const executable = join(directory, "codexbar");
     writeFileSync(executable, "#!/bin/sh\nexit 0\n");
     chmodSync(executable, 0o777);
@@ -89,7 +133,7 @@ describe("CodexBar backend", () => {
   });
 
   test("rejects a CodexBar executable inside the caller working tree", async () => {
-    const directory = mkdtempSync(join(tmpdir(), "usagemux-worktree-"));
+    const directory = trustedTempDir("usagemux-worktree-");
     const executable = join(directory, "codexbar");
     writeFileSync(executable, "#!/bin/sh\nexit 0\n");
     chmodSync(executable, 0o755);
@@ -103,7 +147,7 @@ describe("CodexBar backend", () => {
 
   test("rejects an executable reached through a world-writable directory", async () => {
     if (process.platform === "win32") return;
-    const directory = mkdtempSync(join(tmpdir(), "usagemux-writable-path-"));
+    const directory = trustedTempDir("usagemux-writable-path-");
     const binDirectory = join(directory, "bin");
     const executable = join(binDirectory, "codexbar");
     mkdirSync(binDirectory);
@@ -118,8 +162,35 @@ describe("CodexBar backend", () => {
     }
   });
 
+  test("rejects an executable below a sticky world-writable directory", async () => {
+    if (process.platform === "win32") return;
+    // The layout of /tmp on Linux: a 1777 parent holding a 0700 directory
+    // the current user owns. The sticky bit does not make the parent
+    // trusted; this pins the documented rule the Linux CI run exposed.
+    const directory = trustedTempDir("usagemux-sticky-");
+    const sticky = join(directory, "shared");
+    const owned = join(sticky, "owned");
+    const executable = join(owned, "codexbar");
+    mkdirSync(owned, { recursive: true });
+    chmodSync(owned, 0o700);
+    writeFileSync(executable, "#!/bin/sh\nexit 0\n");
+    chmodSync(executable, 0o755);
+
+    try {
+      // Control: the same layout is accepted while the parent is 0755.
+      expect(await findCodexBarExecutable(owned, FIXTURES)).toBe(
+        await realpath(executable),
+      );
+      chmodSync(sticky, 0o1777);
+      expect(await findCodexBarExecutable(owned, FIXTURES)).toBeNull();
+    } finally {
+      chmodSync(sticky, 0o755);
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
   test("filters caller-controlled paths and code-loader environment", async () => {
-    const worktree = mkdtempSync(join(tmpdir(), "usagemux-environment-"));
+    const worktree = trustedTempDir("usagemux-environment-");
     try {
       const environment = await buildBackendEnvironment({
         PATH: `${worktree}:/usr/bin:/bin`,
@@ -253,7 +324,7 @@ describe("CodexBar backend", () => {
 
   test("re-validates the executable immediately before every spawn", async () => {
     if (process.platform === "win32") return;
-    const directory = mkdtempSync(join(tmpdir(), "usagemux-recheck-"));
+    const directory = trustedTempDir("usagemux-recheck-");
     const executable = join(directory, "codexbar");
     writeFileSync(executable, "#!/bin/sh\necho '{\"provider\":\"codex\"}'\n");
     chmodSync(executable, 0o755);
@@ -281,7 +352,7 @@ describe("CodexBar backend", () => {
 
   test("refuses a backend swapped while the child environment is resolved", async () => {
     if (process.platform === "win32") return;
-    const directory = mkdtempSync(join(tmpdir(), "usagemux-swap-window-"));
+    const directory = trustedTempDir("usagemux-swap-window-");
     const executable = join(directory, "codexbar");
     writeFileSync(executable, "#!/bin/sh\necho '{\"provider\":\"codex\"}'\n");
     chmodSync(executable, 0o755);
@@ -305,8 +376,8 @@ describe("CodexBar backend", () => {
 
   test("refuses an executable replaced by a symlink into the working tree", async () => {
     if (process.platform === "win32") return;
-    const worktree = mkdtempSync(join(tmpdir(), "usagemux-symlink-tree-"));
-    const pathDirectory = mkdtempSync(join(tmpdir(), "usagemux-symlink-path-"));
+    const worktree = trustedTempDir("usagemux-symlink-tree-");
+    const pathDirectory = trustedTempDir("usagemux-symlink-path-");
     const executable = join(pathDirectory, "codexbar");
     writeFileSync(executable, "#!/bin/sh\necho '{\"provider\":\"codex\"}'\n");
     chmodSync(executable, 0o755);
@@ -340,6 +411,14 @@ describe("CodexBar backend", () => {
 
   test("releases a fetch whose escaped descendant holds the pipe", async () => {
     if (process.platform === "win32" || !Bun.which("python3")) return;
+    // The descendant escapes only once python3 has started and forked. On a
+    // fresh macOS runner the first python3 start can take longer than a
+    // short fetch timeout; the timeout then kills the whole group before
+    // the escape, nothing holds the pipe, and the fetch correctly returns
+    // right after the grace period (CI run 42683255513: 471 ms). Warm
+    // python3 first, give the fetch a timeout long enough for the escape,
+    // and assert the escape happened before reading the timing.
+    Bun.spawnSync(["python3", "-c", "pass"]);
     const directory = mkdtempSync(join(tmpdir(), "usagemux-escaped-"));
     const descendantPidFile = join(directory, "descendant.pid");
     const executable = resolve(FIXTURES, "escaped-descendant", "codexbar");
@@ -349,15 +428,19 @@ describe("CodexBar backend", () => {
     try {
       const startedAt = Date.now();
       await outsideCheckout(() =>
-        expect(runCodexBar(executable, "codex", 200)).rejects.toThrow(
-          "CodexBar timed out after 200ms",
+        expect(runCodexBar(executable, "codex", 1_000)).rejects.toThrow(
+          "CodexBar timed out after 1000ms",
         ),
       );
       const elapsed = Date.now() - startedAt;
-      // 200 ms timer + 250 ms grace + at most 2 s cleanup cap; the escaped
-      // descendant holds the pipe for 4 s, so only the cap can release here.
-      expect(elapsed).toBeGreaterThanOrEqual(2_300);
-      expect(elapsed).toBeLessThan(3_500);
+      // The descendant writes its pid only after setsid(), so the file
+      // exists only if it left the process group before the timeout's
+      // signals reached it.
+      expect(await Bun.file(descendantPidFile).exists()).toBe(true);
+      // 1 s timer + 250 ms grace + at most 2 s cleanup cap; the escaped
+      // descendant holds the pipe for 10 s, so only the cap can release here.
+      expect(elapsed).toBeGreaterThanOrEqual(3_200);
+      expect(elapsed).toBeLessThan(5_000);
     } finally {
       // The descendant left the process group before any signal, so only
       // this test terminates it.
@@ -379,7 +462,7 @@ describe("CodexBar backend", () => {
         expect(() => process.kill(descendantPid, 0)).toThrow();
       }
     }
-  });
+  }, 15_000);
 
   test("the CodexBar backend resolves its executable, environment, and fetch together", async () => {
     const backend = new CodexBarBackend();
