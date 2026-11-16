@@ -54,6 +54,16 @@ export class BackendTimeoutError extends Error {
   override name = "BackendTimeoutError";
 }
 
+/** Only a failed process's stderr has CodexBar origin; an exit with empty
+ * stderr is reported in usagemux's own words. */
+export class BackendProcessError extends Error {
+  override name = "BackendProcessError";
+
+  constructor(readonly provider: string, readonly detail: string) {
+    super(`CodexBar failed for provider ${provider}: ${detail}`);
+  }
+}
+
 export class CodexBarBackend implements UsageBackend {
   async findExecutable(): Promise<string | null> {
     return findCodexBarExecutable(process.env.PATH, process.cwd());
@@ -224,8 +234,15 @@ export async function runCodexBar(
       if (payload !== null) {
         return payload;
       }
-      const detail = boundedErrorDetail(stderr.trim()) || `exit code ${exitCode}`;
-      throw new Error(`CodexBar failed for provider ${provider}: ${detail}`);
+      const detail = boundedErrorDetail(stderr.trim());
+      if (detail === "") {
+        // CodexBar said nothing, so this text is usagemux's own, not a
+        // CodexBar diagnostic.
+        throw new Error(
+          `CodexBar exited with code ${exitCode} and wrote no diagnostic for provider ${provider}.`,
+        );
+      }
+      throw new BackendProcessError(provider, detail);
     }
     if (payload === null) {
       throw new Error(`CodexBar returned empty JSON for provider ${provider}.`);

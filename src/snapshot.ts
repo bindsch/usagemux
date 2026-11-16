@@ -1,10 +1,12 @@
 import {
   CLIENT_PROVIDERS,
+  CLIENT_TIMEOUT_MS,
   getNotApplicableMessage,
   withErrorRemedy,
   type Client,
 } from "./clients";
 import {
+  BackendProcessError,
   BackendTimeoutError,
   BackendUnavailableError,
   type UsageBackend,
@@ -17,7 +19,7 @@ export type { UsageBackend } from "./backend";
 
 export interface SnapshotOptions {
   clients: Client[];
-  timeoutMs: number;
+  timeoutMs?: number;
 }
 
 export interface SnapshotDependencies {
@@ -69,7 +71,7 @@ export async function createSnapshot(
       collectClientResult(
         client,
         executable,
-        options.timeoutMs,
+        options.timeoutMs ?? CLIENT_TIMEOUT_MS[client],
         dependencies.backend,
         environment,
       ),
@@ -107,7 +109,7 @@ async function collectClientResult(
     if (result.status === "error" && result.message !== null) {
       // CodexBar exits non-zero but still emits structured JSON for provider
       // errors; those messages flow through the normalizer, not this catch.
-      return { ...result, message: withErrorRemedy(client, result.message) };
+      return { ...result, message: withErrorRemedy(client, result.message, { origin: "codexbar" }) };
     }
     return result;
   } catch (error) {
@@ -115,10 +117,14 @@ async function collectClientResult(
     if (error instanceof BackendUnavailableError) {
       return unavailableResult(client, provider, message);
     }
+    if (error instanceof BackendProcessError) {
+      return errorResult(client, provider,
+        `CodexBar failed for provider ${error.provider}: ${withErrorRemedy(client, error.detail, { origin: "codexbar" })}`);
+    }
     return errorResult(
       client,
       provider,
-      withErrorRemedy(client, message, { timeoutMs, ownTimeout: error instanceof BackendTimeoutError }),
+      withErrorRemedy(client, message, { origin: "usagemux", timeoutMs, ownTimeout: error instanceof BackendTimeoutError }),
     );
   }
 }

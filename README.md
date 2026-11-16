@@ -16,14 +16,14 @@ After installing Bun and the CodexBar CLI:
 ```sh
 git clone https://github.com/bindsch/usagemux.git
 cd usagemux
-git checkout v1.0.1
+git checkout v1.1.0
 make install
 make link
 usagemux --version
 usagemux snapshot --client aider
 ```
 
-`v1.0.1` is the current release; use the
+`v1.1.0` is the release documented here; use the
 [latest tag](https://github.com/bindsch/usagemux/releases) on later updates.
 
 Keep this checkout: the linked launcher reads its source files at runtime.
@@ -38,8 +38,20 @@ usagemux snapshot --client codex --client claude --format json
 usagemux snapshot --all --timeout 90
 ```
 
-The default selects every supported client except `agy`. `--all` changes
-selection only; the last example also increases the per-provider timeout.
+The default selects every supported client, including `agy`, exactly as `--all`.
+Default timeouts are 10 seconds generally, 60 for `claude`, and 90 for `agy`.
+An explicit `--timeout` applies to every selected client. Retry one client with
+`--client <name> --timeout <seconds>`. Providers run in parallel,
+so the snapshot waits for the slowest provider, plus preparation and cleanup.
+
+CodexBar credential failures do not establish a harness's login status.
+CodexBar's structured error text and failed-process stderr are
+preserved with a `CodexBar reported: ` prefix. usagemux's own diagnostics have no
+attribution prefix and no closing sentence. Every CodexBar diagnostic ends with:
+"This is CodexBar's own diagnostic and says nothing about whether the harness is signed in."
+This fixed sentence follows any provider advice, regardless of diagnostic wording.
+For Kimi 2.6 credentials that CodexBar cannot read, export `KIMI_CODE_API_KEY`
+for the codexbar process. usagemux never reads the macOS Keychain or runs `security`.
 
 The [provider guide](docs/PROVIDERS.md) lists all client mappings, credential
 setup, and limitations. Provider-agnostic clients need no backend and return

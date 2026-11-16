@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 
 import { CodexBarBackend, type UsageBackend } from "./backend";
 import {
-  DEFAULT_CLIENTS,
+  CLIENT_TIMEOUT_MS,
   MAX_TIMEOUT_SECONDS,
   SUPPORTED_CLIENTS,
   isSupportedClient,
@@ -11,7 +11,6 @@ import {
 import { formatSnapshotJson, formatSnapshotText, escapeForTerminal } from "./format";
 import { createSnapshot, determineExitCode } from "./snapshot";
 
-const DEFAULT_TIMEOUT_SECONDS = 10;
 const USAGE_EXIT_CODE = 64;
 const UNEXPECTED_EXIT_CODE = 1;
 const PACKAGE_VERSION = readPackageVersion();
@@ -26,9 +25,12 @@ Options:
   --client <client>    Select clients in first-occurrence order; duplicates are ignored.
   --all               Select every supported client; mutually exclusive with --client.
   --format <format>    Output format: text (default) or json.
-  --timeout <seconds>  Per-provider timeout: >0 to ${MAX_TIMEOUT_SECONDS} seconds; default ${DEFAULT_TIMEOUT_SECONDS}; fractions allowed.
+  --timeout <seconds>  Override every selected client's timeout: >0 to ${MAX_TIMEOUT_SECONDS} seconds; fractions allowed.
 
-With no selection, every client except agy is selected.
+With no selection, every supported client is selected, exactly as with --all.
+Default timeouts: ${CLIENT_TIMEOUT_MS.codex / 1000} seconds generally, ${CLIENT_TIMEOUT_MS.claude / 1000} for claude, ${CLIENT_TIMEOUT_MS.agy / 1000} for agy.
+Retry one client with --client <name> --timeout <seconds>.
+Providers run in parallel; the snapshot waits for the slowest provider.
 Value options accept --option=value; the last format or timeout value wins.
 Help and version accept only the standalone forms above, without other options.
 
@@ -40,7 +42,7 @@ export interface ParsedSnapshotArgs {
   kind: "snapshot";
   clients: Client[];
   format: "json" | "text";
-  timeoutMs: number;
+  timeoutMs?: number;
 }
 
 export type ParsedCliArgs =
@@ -84,7 +86,7 @@ export function parseCliArgs(argv: string[]): ParsedCliArgs {
   const clients: Client[] = [];
   let all = false;
   let format: "json" | "text" = "text";
-  let timeoutSeconds = DEFAULT_TIMEOUT_SECONDS;
+  let timeoutSeconds: number | undefined;
 
   for (let index = 1; index < argv.length; index += 1) {
     const argument = argv[index]!;
@@ -142,9 +144,9 @@ export function parseCliArgs(argv: string[]): ParsedCliArgs {
 
   return {
     kind: "snapshot",
-    clients: clients.length > 0 ? clients : all ? [...SUPPORTED_CLIENTS] : [...DEFAULT_CLIENTS],
+    clients: clients.length > 0 ? clients : [...SUPPORTED_CLIENTS],
     format,
-    timeoutMs: timeoutSeconds * 1_000,
+    timeoutMs: timeoutSeconds === undefined ? undefined : timeoutSeconds * 1_000,
   };
 }
 

@@ -28,11 +28,11 @@ also a usage error.
 | Option | Meaning |
 | --- | --- |
 | `--client <client>` | Select one client; repeat for more. Mutually exclusive with `--all`. |
-| `--all` | Select every client in the [provider table](PROVIDERS.md#client-mapping). |
+| `--all` | Select every client in the [provider table](PROVIDERS.md#client-mapping), the same as the default selection. |
 | `--format text\|json` | Select output; default `text`. |
-| `--timeout <seconds>` | Per-provider timeout; default 10, greater than 0 and at most 300. Fractional seconds are accepted. |
+| `--timeout <seconds>` | Override every client's timeout; greater than 0 and at most 300. Fractional seconds are accepted. |
 
-With neither selection option, every client except `agy` is selected.
+With neither selection option, every supported client, including `agy`, is selected.
 Explicit clients are deduplicated in first-occurrence order. Default and
 `--all` results follow the provider table's order.
 
@@ -47,8 +47,13 @@ usagemux snapshot --client agy --timeout 90
 usagemux snapshot --all --timeout 90
 ```
 
-`--all` does not increase the timeout. The timer applies to each provider,
-not the whole command; see [execution limits](BACKEND.md#execution-and-limits).
+Without `--timeout`, defaults are 10 seconds generally, 60 for `claude`, and
+90 for `agy`. The single implementation table is `CLIENT_TIMEOUT_MS` in
+`src/clients.ts`. `--all` uses these same defaults. An explicit `--timeout`
+replaces every client's default, including when it is shorter.
+The timer applies to each provider, not the whole command. Providers run in
+parallel, so collection waits for the slowest provider, plus preparation and
+cleanup; see [execution limits](BACKEND.md#execution-and-limits).
 
 ## Output
 

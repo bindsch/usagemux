@@ -14,6 +14,8 @@ codexbar --provider <provider> --format json --json-only
 The executable path is resolved before launch. The child runs from that
 executable's directory with stdin ignored. Credentials are not placed in
 argv; provider credential variables remain available in its environment.
+usagemux never reads the macOS Keychain or runs `security`. CodexBar owns
+its credential sources; a CodexBar failure is not evidence of a harness logout.
 
 ## Discovery and trust
 
@@ -80,6 +82,10 @@ It passes `--no-env-file --no-install` and the package's explicit
 Selected applicable providers run concurrently. Results retain client order
 and are emitted together after collection. There is no concurrency option,
 retry loop, or overall command deadline.
+Default timers are 10 seconds generally, 60 for `claude`, and 90 for `agy`,
+from `CLIENT_TIMEOUT_MS` in `src/clients.ts`. An explicit `--timeout` replaces
+all defaults. Collection therefore waits for the slowest provider rather
+than the sum of the provider times, plus preparation and cleanup.
 
 | Limit | Scope |
 | --- | --- |

@@ -56,8 +56,9 @@ closed; it did not preserve that command's complete output or elapsed time.
 
 `./bin/usagemux snapshot --client copilot` reportedly exited zero with an
 `error` result: no available fetch strategy, followed by credential advice.
-This indicated missing authentication on that machine, not universal lack of
-Copilot support.
+This showed that CodexBar found no usable fetch strategy on that machine.
+It did not establish the Copilot harness's login status or universal lack of
+Copilot support. The previous missing-authentication inference was incorrect.
 
 A full snapshot in the sandbox reported a Claude probe-directory failure.
 The report proposed sandbox restrictions as the cause, but did not include a

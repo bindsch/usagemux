@@ -175,31 +175,69 @@ failures instead produce a diagnostic with source `codexbar`.
 
 Malformed JSON produces a parsing diagnostic, taking precedence over stderr.
 Without a non-null payload, a nonzero backend exit uses trimmed, truncated
-stderr or the exit code, prefixed with `CodexBar failed for provider ...`.
+stderr, prefixed with `CodexBar failed for provider ...`. With empty stderr,
+usagemux reports the exit code in its own words, with no CodexBar attribution.
 A successful backend exit with empty or JSON-null stdout produces an empty-JSON
 diagnostic. See [capture limits](BACKEND.md#execution-and-limits).
 
-`withErrorRemedy(client, message, options = {})` appends advice only when:
+`withErrorRemedy(client, message, options = {})` preserves CodexBar's entire
+structured error text (`error.message` or the supported string `error`), including
+no-strategy suffixes, and prefixes it with `CodexBar reported: `. Failed processes
+carry a typed `BackendProcessError`: only failed-process stderr receives that
+prefix, after usagemux's `CodexBar failed for provider ...: ` context.
+Snapshot collection passes `options.origin` explicitly. usagemux's own diagnostics
+have no attribution prefix: malformed or empty JSON, output byte limits, schema
+validation, start failures, trust re-checks, and its own timeouts.
+Every CodexBar diagnostic ends with the fixed sentence:
+"This is CodexBar's own diagnostic and says nothing about whether the harness is signed in."
+The sentence follows any provider advice, regardless of diagnostic wording.
+No authentication-wording heuristic or inspection limit applies.
+usagemux's own diagnostics receive no such sentence.
+
+It also adds advice when:
 
 - The message starts exactly with `No available fetch strategy for`.
-  Structured provider errors normally use this route. A prefixed thrown
-  failure does not match. Client-specific advice is in the
-  [provider guide](PROVIDERS.md#credentials-and-remedies); others get an
-  account-setup hint.
-- The message starts with `CodexBar timed out after` and
-  `options.ownTimeout === true`, set for usagemux's `BackendTimeoutError`.
-  Advice accounts for `options.timeoutMs` and the CLI timeout cap.
-  Backend-reported timeouts do not meet this condition.
+  Structured provider errors normally use this route. The original message
+  and any upstream advice remain attributed to CodexBar.
+  Client-specific advice is in the [provider guide](PROVIDERS.md#credentials-and-remedies);
+  others get a CodexBar credential-source hint. None establishes the
+  harness's login status.
+- `options.ownTimeout === true`, set for usagemux's `BackendTimeoutError`.
+  Advice accounts for the effective `options.timeoutMs` (including per-client
+  defaults) and the CLI timeout cap. `--timeout` applies to every selected client;
+  retry one client with `--client <name> --timeout <seconds>`.
+  This is usagemux's own diagnostic, so it receives no `CodexBar reported: `
+  prefix. Backend-reported timeouts receive the prefix but no timeout advice.
 
-One message is replaced rather than extended: for client `kimi`, a message
-containing `credential is invalid or expired` becomes an explanation that the
-Kimi Code CLI's 15-minute access token aged out, when the CLI credential at
-`$KIMI_CODE_HOME/credentials/kimi-code.json` (default `~/.kimi-code`) holds a
-refresh token and its `expires_at` is within 60 seconds of now or past it, the
-margin CodexBar uses. Only those two fields are read. The replacement does not
-claim the sign-in is valid, since a revoked refresh token looks the same.
+For client `kimi`, a message containing `credential is invalid or expired`
+receives an explanation that the Kimi Code CLI's 15-minute access token aged
+out, only when a regular `kimi-code*.json` file in the Kimi credentials
+directory holds a refresh token
+and its `expires_at` is within 60 seconds of now or past it, and no matching
+file has a fresh expiry. The directory is under `KIMI_CODE_HOME` when set,
+otherwise under the CLI's default `.kimi-code` configuration directory.
+Legacy and Kimi 2.6 environment files are both checked. Only expiry and refresh
+token presence affect the decision; token values are never emitted.
+If the scan does not establish that the token aged out, the original
+diagnostic and caveat instead receive the `KIMI_CODE_API_KEY` hint. This
+Kimi-specific handling takes precedence over no-strategy advice.
 
-All other messages remain unchanged. Remedies do not change result status.
+Enumeration stops after 256 directory entries and matching paths are sorted
+before reading. Each read is limited to 64 KiB. The directory is resolved once
+with `realpath`, so directory symlinks and ancestor aliases are accepted;
+a matching name that is a symlink or not a regular file makes the scan
+inconclusive. Files are opened
+without following symlinks, checked again for regular-file status, and read
+with a byte cap even if they grow. An incomplete scan, malformed JSON,
+unreadable file, oversized file, or missing/unreadable `expires_at` makes the
+result inconclusive (`false`), even alongside an expired legacy token.
+A fresh expiry suppresses the explanation even without a refresh token.
+The added explanation makes no login claim and offers no sign-in instruction,
+since a revoked refresh token looks the same.
+
+CodexBar's source label is not proof that the harness itself reported a login
+failure. Unrelated diagnostics receive only the attribution prefix. Remedies
+do not change result status or the JSON schema.
 
 Text uses the [CLI display escapes](CLI.md#output). JSON serialization escapes
 C0 inside strings; since 0.2.1 the JSON formatter also escapes DEL and C1 as

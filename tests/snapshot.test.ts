@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { BackendTimeoutError } from "../src/backend";
+import { BackendProcessError, BackendTimeoutError } from "../src/backend";
 import {
   BackendUnavailableError,
   createSnapshot,
@@ -120,7 +120,7 @@ describe("snapshot orchestration", () => {
         backend: backend({
           fetch: async (_executable, provider) => {
             if (provider === "copilot") {
-              throw new Error("No available fetch strategy for copilot.");
+              throw new BackendProcessError("copilot", "No available fetch strategy for copilot.");
             }
             return { provider, usage: { primary: { usedPercent: 10 } } };
           },
@@ -157,8 +157,8 @@ describe("snapshot orchestration", () => {
     );
 
     expect(result.results[0]?.status).toBe("error");
-    expect(result.results[0]?.message).toBe(
-      "No available fetch strategy for copilot. Add a Copilot account in CodexBar (menu > Add / switch account, GitHub device flow); a plain gh auth token cannot authenticate to the Copilot usage API.",
+    expect(result.results[0]?.message).toContain(
+      "CodexBar could not read Copilot usage with its available credentials.",
     );
   });
 
@@ -177,7 +177,7 @@ describe("snapshot orchestration", () => {
 
     expect(result.results[0]?.status).toBe("error");
     expect(result.results[0]?.message).toContain(
-      "Retry with a longer --timeout (up to 300 seconds)",
+      "Retry this client with --client agy --timeout <seconds> (up to 300 seconds)",
     );
   });
 

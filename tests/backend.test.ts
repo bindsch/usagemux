@@ -198,6 +198,7 @@ describe("CodexBar backend", () => {
         NODE_OPTIONS: "--require owned.js",
         DYLD_INSERT_LIBRARIES: "/tmp/owned.dylib",
         OPENAI_API_KEY: "preserved",
+        KIMI_CODE_API_KEY: "fixture-key",
       }, worktree);
 
       expect(environment.PATH?.split(":")).not.toContain(worktree);
@@ -205,6 +206,7 @@ describe("CodexBar backend", () => {
       expect(environment.NODE_OPTIONS).toBeUndefined();
       expect(environment.DYLD_INSERT_LIBRARIES).toBeUndefined();
       expect(environment.OPENAI_API_KEY).toBe("preserved");
+      expect(environment.KIMI_CODE_API_KEY).toBe("fixture-key");
     } finally {
       rmSync(worktree, { recursive: true, force: true });
     }

@@ -63,6 +63,7 @@ repository or required by `make check`.
 | `bin/usagemux`, `bunfig.runtime.toml` | Trusted Bun lookup and runtime configuration. |
 | `src/cli.ts`, `src/index.ts` | Arguments, entry point, output, exit codes. |
 | `src/clients.ts` | Client mapping, defaults, error remedies. |
+| `src/credentials.ts` | Bounded Kimi credential expiry checks; no Keychain access. |
 | `src/backend.ts` | Discovery, environment, process execution, limits. |
 | `src/normalize*.ts`, `src/types.ts` | Upstream normalization (entry point, windows, dates, shared readers) and public data types. |
 | `src/snapshot.ts` | Concurrent collection and provider statuses. |

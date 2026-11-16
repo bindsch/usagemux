@@ -9,6 +9,45 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 Nothing yet.
 
+## [1.1.0] - 2026-11-16
+
+### Fixed
+
+- Credential remedies describe what CodexBar could not read and what to
+  configure for CodexBar. They no longer infer that a harness is signed out
+  or instruct users to sign in. CodexBar's structured error text and failed-process
+  stderr are preserved with a `CodexBar reported: ` prefix,
+  including no-strategy suffixes. usagemux's own diagnostics have no attribution
+  prefix or closing sentence. Every CodexBar diagnostic ends with the fixed sentence:
+  "This is CodexBar's own diagnostic and says nothing about whether the harness is signed in."
+  The sentence follows any provider advice, regardless of diagnostic wording.
+- Kimi advice names the Kimi 2.6 `credentials/kimi-code-env-<id>.json`
+  layout and the `KIMI_CODE_API_KEY` workaround for CodexBar. The aged-out
+  explanation no longer appends a sign-in instruction or replaces the backend
+  diagnostic. The API-key hint remains when the scan cannot establish staleness.
+  Copilot's no-strategy remedy retains its GitHub device-flow advice.
+- The Kimi expiry check scans sorted regular `kimi-code*.json` files, with
+  bounded enumeration and reads and no file-symlink following. It requires
+  an aged-out token with a refresh token and no fresh expiry in any file.
+  Directory aliases are resolved once, including macOS temp-directory and
+  linked-home paths. Incomplete or unreadable scans, including files without
+  a readable expiry, do not produce a stale-token claim. Credential test
+  fixtures use system temp so they also work in read-only checkouts.
+
+### Changed
+
+- Bare snapshots include `agy` and equal `--all`; no client is excluded.
+- Per-client default timeouts are 10 seconds generally, 60 for `claude`,
+  and 90 for `agy`. An explicit `--timeout` applies to every selected client.
+  Retry one client with `--client <name> --timeout <seconds>`.
+  Providers still run in parallel. Timeout advice reflects the effective
+  timeout and no longer suggests that 90 seconds must suffice for `agy`.
+- Help, README, provider, protocol, backend, and installation references
+  describe these defaults and the limits of credential evidence. Correct
+  the historical report's unsupported authentication inference.
+- Split existing oversized test files and add regressions for credential advice,
+  scanning, selection, and timeouts.
+
 ## [1.0.1] - 2026-11-03
 
 ### Fixed
@@ -227,7 +266,8 @@ Nothing yet.
 - Normalization of quota windows, credits, and subscription renewal/expiry
   across providers.
 
-[Unreleased]: https://github.com/bindsch/usagemux/compare/v1.0.1...HEAD
+[Unreleased]: https://github.com/bindsch/usagemux/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/bindsch/usagemux/releases/tag/v1.1.0
 [1.0.1]: https://github.com/bindsch/usagemux/releases/tag/v1.0.1
 [1.0.0]: https://github.com/bindsch/usagemux/releases/tag/v1.0.0
 [0.2.1]: https://github.com/bindsch/usagemux/releases/tag/v0.2.1
